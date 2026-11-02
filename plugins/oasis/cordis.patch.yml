@@ -1,0 +1,10 @@
+﻿# ============================================================================
+# oasis — full Oasis bundle (old surfcore disabled after restart)
+# ============================================================================
+- insert:
+    - id: oasis
+      name: oasis
+      config: {}
+    - id: qq-mode
+      name: ./lib/qq-mode.js
+      config: {}

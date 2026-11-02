@@ -1,0 +1,36 @@
+# dependencies
+node_modules/
+.npm-cache/
+
+# runtime state and local config
+state/
+characters/
+config.json
+*.log
+*.bak
+*.bak-*
+.env
+.env.*
+token*.json
+*cookies*
+*credential*
+
+# local role/persona/memory data
+roles/*.md
+!roles/README.md
+memories/
+memory/
+audio/
+assets/project-intro.mp4
+
+# release/build output
+dist/*.zip
+oasis-public/
+*.zip
+*.sha256
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

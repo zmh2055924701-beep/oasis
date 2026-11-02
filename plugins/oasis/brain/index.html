@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>她的大脑 · 赛博脑区</title>
+<style>
+  :root {
+    --bg:#050913; --panel:rgba(10,18,32,.82); --line:rgba(110,170,255,.22);
+    --text:#e6efff; --muted:#8fa6cc; --cyan:#63e2ff; --gold:#ffd166;
+    --pink:#ff7b9c; --green:#8affc1; --purple:#b28cff;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--text);
+    font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; }
+  #bg { position:fixed; inset:0; width:100%; height:100%; z-index:0; }
+  #brainCanvas { position:fixed; inset:0; width:100%; height:100%; cursor:crosshair; z-index:1; }
+  .panel { position:fixed; background:rgba(10,18,32,.96); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 18px 60px rgba(0,0,0,.5); z-index:100; transform:translateZ(0); will-change:transform; }
+  #topbar { z-index:110; top:16px; left:20px; right:20px; display:flex; align-items:flex-start; justify-content:space-between; pointer-events:none; z-index:11; }
+  #title { pointer-events:auto; background:linear-gradient(120deg,rgba(8,16,30,.92),rgba(8,16,30,.55));
+    border:1px solid var(--line); border-radius:14px; padding:12px 16px; }
+  #title h1 { margin:0; font-size:17px; letter-spacing:.6px; }
+  #title h1 span { color:var(--cyan); font-weight:400; font-size:11px; margin-left:8px; }
+  #title .sub { color:var(--muted); font-size:11px; margin-top:4px; }
+  #rightTools { display:flex; gap:8px; align-items:center; pointer-events:auto; }
+  #rightTools .status { color:var(--muted); font-size:11px; margin-right:6px; }
+  button { background:rgba(16,30,52,.88); color:#d7e6ff; border:1px solid var(--line); border-radius:9px;
+    padding:7px 11px; font-size:12px; cursor:pointer; transition:border-color .2s,color .2s; }
+  button:hover { border-color:var(--cyan); color:#fff; }
+  #left { top:86px; left:20px; width:310px; padding:14px 15px; }
+  #left h2 { margin:0 0 8px; font-size:13px; color:var(--cyan); font-weight:600; letter-spacing:.4px; }
+  #moodChart { width:100%; height:148px; display:block; }
+  #moodNow { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:4px; }
+  #moodNow b { color:var(--text); font-weight:600; }
+  .needs { margin-top:12px; display:grid; gap:6px; }
+  .need { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--muted); }
+  .need .bar { flex:1; height:6px; background:#16233b; border-radius:4px; overflow:hidden; }
+  .need .bar i { display:block; height:100%; width:50%; border-radius:4px; background:linear-gradient(90deg,#2a5c9e,var(--cyan)); transition:width .8s; }
+  .thoughtsHead { margin-top:12px; font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
+  .thoughts { margin-top:6px; display:flex; flex-direction:column; gap:4px; max-height:120px; overflow:auto; }
+  .thought { font-size:11px; color:#cfe0ff; line-height:1.45; border-left:2px solid #3d639b; padding-left:7px; }
+  .thought b { color:var(--cyan); font-weight:500; margin-right:4px; }
+  #brainHint { position:fixed; left:20px; bottom:154px; width:300px; color:var(--muted); font-size:11px; line-height:1.6;
+    background:rgba(8,14,26,.6); border:1px solid var(--line); border-radius:12px; padding:9px 12px; z-index:9; }
+  #regionPanel { top:86px; right:20px;  width:380px; max-height:calc(100vh - 180px); padding:14px 16px; display:none; overflow:auto; }
+  #regionPanel.open { display:block; }
+  #regionPanel .rh { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  #regionPanel h2 { margin:0; font-size:15px; color:var(--cyan); }
+  #regionPanel .desc { color:var(--muted); font-size:11px; margin:4px 0 10px; }
+  #regionStats { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:10px; }
+  #regionStats .stat { background:rgba(20,36,60,.6); border:1px solid rgba(110,170,255,.16); border-radius:10px; padding:7px 9px; }
+  #regionStats .stat b { display:block; font-size:15px; color:var(--text); }
+  #regionStats .stat span { font-size:10px; color:var(--muted); }
+  #regionMetrics { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  #regionMetrics span { font-size:10px; color:#bcd2f5; border:1px solid rgba(110,170,255,.18); background:rgba(20,36,60,.5); border-radius:8px; padding:3px 7px; }
+  #miniGraph { width:100%; height:250px; background:rgba(4,9,18,.55); border:1px solid var(--line); border-radius:12px; display:block; }
+  #regionPanel .back { margin-top:10px; width:100%; }
+  #timeline { left:20px; right:20px; bottom:16px; padding:10px 14px; height:124px; display:flex; flex-direction:column; gap:6px; }
+  #timeline .head { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); }
+  #events { flex:1; overflow:auto; display:flex; flex-direction:column; gap:3px; }
+  .event { font-size:12px; color:#e6efff; border-left:2px solid #3d639b; padding-left:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .event b { color:var(--cyan); font-weight:500; }
+  #empty { position:fixed; inset:0; display:none; align-items:center; justify-content:center; color:var(--muted);
+    font-size:14px; line-height:1.8; text-align:center; z-index:8; pointer-events:none; }
+  @media (max-width:1180px) { #regionPanel { width:330px; } #left { width:280px; } }
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<canvas id="brainCanvas"></canvas>
+
+<div id="topbar">
+  <div id="title">
+    <h1>她的大脑 <span>CYBER BRAIN · 实时</span></h1>
+    <div class="sub" id="meta">连接中…</div>
+    <div class="sub" id="nowline">真实时间加载中…</div>
+  </div>
+  <div id="rightTools">
+    <span class="status" id="liveStatus">●</span>
+    <button id="btnOverview">回到总览</button>
+    <button id="btnRefresh">刷新</button>
+  </div>
+</div>
+
+<div id="left" class="panel">
+  <h2>心情曲线 · 近 24 小时</h2>
+  <canvas id="moodChart"></canvas>
+  <div id="moodNow"><span>愉悦度 <b id="moodValence">0.00</b></span><span>唤醒度 <b id="moodArousal">0.00</b></span></div>
+  <div class="needs" id="needs"></div>
+  <div class="thoughtsHead">内心活动 <span id="thoughtCount"></span></div>
+  <div class="thoughts" id="thoughts"></div>
+</div>
+
+<div id="brainHint">点脑区查看对应模块；节点颜色越亮 = 她觉得越重要。<br>页面每 3 秒自动更新，不需要手动刷新。</div>
+
+<div id="regionPanel" class="panel">
+  <div class="rh"><h2 id="regionName">脑区</h2><button id="btnCloseRegion">返回</button></div>
+  <div class="desc" id="regionDesc"></div>
+  <div id="regionStats"></div>
+  <div id="regionMetrics"></div>
+  <canvas id="miniGraph"></canvas>
+  <button class="back" id="btnBack">← 回到大脑总览</button>
+</div>
+
+<div id="timeline" class="panel">
+  <div class="head"><span>最近事件（触发 → 评估 → 情绪）</span><span id="eventCount"></span></div>
+  <div id="events"></div>
+</div>
+<div id="empty">还没有大脑数据。<br>等她在 QQ 里说几句话，再回来看。</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const brainCanvas = $('brainCanvas');
+  const bctx = brainCanvas.getContext('2d');
+  const bgCanvas = $('bg');
+  const gctx = bgCanvas.getContext('2d');
+  const moodCanvas = $('moodChart');
+  const mctx = moodCanvas.getContext('2d');
+  const mini = $('miniGraph');
+  const minictx = mini.getContext('2d');
+
+  const BRAIN_TOKEN = new URLSearchParams(location.search).get('token') || '';
+  const API_BASE = location.pathname.startsWith('/brain') ? '/api/brain' : '/dsh-oasis/api/brain';
+  function withToken(url) {
+    if (!BRAIN_TOKEN) return url;
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(BRAIN_TOKEN);
+  }
+  async function fetchJson(url) {
+    const res = await fetch(withToken(url), { headers: { accept: 'application/json' } });
+    if (!res.ok) throw new Error('HTTP ' + res.status + (res.status === 401 ? '（缺少/失效的本地令牌）' : ''));
+    return res.json();
+  }
+
+  const REGIONS = [
+    { id:'prefrontal', name:'前额叶', desc:'目标、计划、自控', color:'#ffd166', x:205, y:-25 },
+    { id:'hippocampus', name:'海马体', desc:'记忆编码与回放', color:'#63e2ff', x:-38, y:44 },
+    { id:'amygdala', name:'杏仁核', desc:'情绪与威胁', color:'#ff7b9c', x:54, y:22 },
+    { id:'insula', name:'岛叶', desc:'生理状态与需求', color:'#8affc1', x:108, y:-16 },
+    { id:'dmn', name:'默认模式网络', desc:'发呆、走神、自我叙事', color:'#b28cff', x:-70, y:-86 },
+    { id:'temporal', name:'颞叶', desc:'语义、知识、话题', color:'#7cc4ff', x:16, y:116 },
+    { id:'social', name:'社会认知', desc:'关系、心智理论', color:'#f5c56b', x:146, y:30 },
+    { id:'parietal', name:'顶叶', desc:'注意力与空间', color:'#9fb7d9', x:16, y:-168 },
+    { id:'occipital', name:'枕叶', desc:'视觉画面与 B 站', color:'#9ee37d', x:-208, y:-22 },
+    { id:'broca', name:'布罗卡区', desc:'表达与说话风格', color:'#ffb86b', x:178, y:112 },
+    { id:'cerebellum', name:'小脑', desc:'习惯与节奏', color:'#5fd6c0', x:-208, y:112 },
+    { id:'brainstem', name:'脑干', desc:'基础唤醒与精力', color:'#8fa3c7', x:-120, y:168 },
+  ];
+
+  const state = { mood:'', graph:{nodes:[],edges:[]}, regions:[], events:[], moodPoints:[],
+    live:null, selected:null, hover:null, lastLiveAt:0, es:null, timer:null };
+
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    for (const [canvas, ctx] of [[brainCanvas, bctx], [bgCanvas, gctx]]) {
+      canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
+      canvas.style.width = innerWidth + 'px'; canvas.style.height = innerHeight + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    const mr = moodCanvas.getBoundingClientRect();
+    moodCanvas.width = mr.width * dpr; moodCanvas.height = mr.height * dpr;
+    mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (state.selected) sizeMini();
+    drawBg(); drawBrain(); drawMood();
+    if (state.selected) drawMini();
+  }
+  window.addEventListener('resize', resize);
+
+  const stars = Array.from({ length: 90 }, () => ({ x:Math.random(), y:Math.random(), a:Math.random() * 0.35 + 0.08 }));
+  function drawBg() {
+    const w = innerWidth, h = innerHeight;
+    gctx.clearRect(0, 0, w, h);
+    const grd = gctx.createRadialGradient(w * 0.58, h * 0.5, 20, w * 0.58, h * 0.5, Math.max(w, h) * 0.75);
+    grd.addColorStop(0, 'rgba(14,32,64,.55)'); grd.addColorStop(.55, 'rgba(5,11,23,.2)'); grd.addColorStop(1, 'rgba(3,6,14,.95)');
+    gctx.fillStyle = grd; gctx.fillRect(0, 0, w, h);
+    for (const s of stars) {
+      gctx.fillStyle = 'rgba(130,190,255,' + s.a + ')';
+      gctx.fillRect(s.x * w, s.y * h, 1.1, 1.1);
+    }
+  }
+
+  function brainTransform() {
+    const w = innerWidth, h = innerHeight;
+    const cx = w * 0.58, cy = h * 0.5 + 18;
+    return { cx, cy, s: Math.min(w / 1100, h / 760) * 1.15 };
+  }
+
+  function brainPath(ctx) {
+    ctx.beginPath();
+    ctx.moveTo(-258, -28);
+    ctx.bezierCurveTo(-288, -128, -198, -232, -66, -238);
+    ctx.bezierCurveTo(72, -244, 204, -188, 244, -84);
+    ctx.bezierCurveTo(276, 2, 244, 92, 176, 136);
+    ctx.bezierCurveTo(130, 166, 82, 158, 48, 132);
+    ctx.bezierCurveTo(6, 166, -72, 174, -132, 148);
+    ctx.bezierCurveTo(-196, 120, -224, 72, -226, 20);
+    ctx.bezierCurveTo(-238, 4, -250, -12, -258, -28);
+    ctx.closePath();
+  }
+
+  function regionBlob(ctx, r, stats) {
+    const activity = stats ? stats.activity : 0.2;
+    const rad = 44 + activity * 34;
+    const g = ctx.createRadialGradient(r.x, r.y, 2, r.x, r.y, rad);
+    g.addColorStop(0, hexA(r.color, .55));
+    g.addColorStop(.45, hexA(r.color, .16));
+    g.addColorStop(1, hexA(r.color, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(r.x, r.y, rad, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = hexA(r.color, .5);
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(r.x, r.y, rad * .68, 0, Math.PI * 2); ctx.stroke();
+  }
+
+  function drawBrain(t) {
+    const w = innerWidth, h = innerHeight;
+    bctx.clearRect(0, 0, w, h);
+    const { cx, cy, s } = brainTransform();
+    const pulse = 1 + Math.sin((t || 0) / 900) * 0.006;
+    bctx.save(); bctx.translate(cx, cy); bctx.scale(s * pulse, s * pulse);
+
+    bctx.save();
+    brainPath(bctx);
+    const fill = bctx.createLinearGradient(-260, -240, 260, 220);
+    fill.addColorStop(0, 'rgba(18,46,84,.55)');
+    fill.addColorStop(.55, 'rgba(9,24,46,.7)');
+    fill.addColorStop(1, 'rgba(6,14,28,.82)');
+    bctx.fillStyle = fill; bctx.fill();
+    bctx.strokeStyle = 'rgba(99,226,255,.5)'; bctx.lineWidth = 1.4;
+    bctx.shadowColor = 'rgba(99,226,255,.4)'; bctx.shadowBlur = 18; bctx.stroke();
+    bctx.shadowBlur = 0;
+    bctx.restore();
+
+    bctx.strokeStyle = 'rgba(120,180,255,.13)'; bctx.lineWidth = 1;
+    for (let i = -2; i <= 2; i++) {
+      bctx.beginPath();
+      bctx.moveTo(-230, i * 38 - 20);
+      bctx.bezierCurveTo(-120, i * 44 - 50, 60, i * 40 - 20, 225, i * 28 - 8);
+      bctx.stroke();
+    }
+    bctx.beginPath(); bctx.moveTo(-10, -228); bctx.bezierCurveTo(26, -70, 26, 40, 40, 140); bctx.stroke();
+
+    bctx.fillStyle = 'rgba(12,30,54,.8)';
+    bctx.strokeStyle = 'rgba(95,214,192,.4)';
+    bctx.beginPath(); bctx.ellipse(-188, 150, 62, 34, .2, 0, Math.PI * 2); bctx.fill(); bctx.stroke();
+    bctx.beginPath(); bctx.moveTo(-96, 168); bctx.quadraticCurveTo(-120, 228, -150, 244);
+    bctx.lineWidth = 16; bctx.strokeStyle = 'rgba(72,110,160,.55)'; bctx.stroke();
+    bctx.lineWidth = 1; bctx.strokeStyle = 'rgba(143,163,199,.45)'; bctx.stroke();
+
+    for (let i = 0; i < 55; i++) {
+      const a = i * 2.399; const rr = 40 + (i * 37) % 220;
+      const x = Math.cos(a) * rr * 1.12, y = Math.sin(a) * rr * .78;
+      bctx.fillStyle = 'rgba(130,200,255,' + (0.05 + (i % 5) * 0.02) + ')';
+      bctx.fillRect(x, y, 1.5, 1.5);
+    }
+
+    for (const r of REGIONS) {
+      const stats = state.regions.find((x) => x.id === r.id);
+      const selected = state.selected === r.id;
+      const hover = state.hover === r.id;
+      const dim = state.selected && !selected;
+      bctx.save();
+      if (dim) bctx.globalAlpha = 0.32;
+      regionBlob(bctx, r, stats);
+      bctx.shadowColor = r.color; bctx.shadowBlur = selected ? 22 : hover ? 14 : 0;
+      bctx.fillStyle = r.color;
+      bctx.beginPath(); bctx.arc(r.x, r.y, selected ? 7 : 4.5, 0, Math.PI * 2); bctx.fill();
+      bctx.shadowBlur = 0;
+      if (selected) {
+        bctx.strokeStyle = 'rgba(255,255,255,.65)'; bctx.lineWidth = 1.2;
+        bctx.beginPath(); bctx.arc(r.x, r.y, 18 + Math.sin((t || 0) / 500) * 3, 0, Math.PI * 2); bctx.stroke();
+      }
+      bctx.font = (selected ? '600 12px' : '11px') + ' "Segoe UI","Microsoft YaHei",sans-serif';
+      bctx.textAlign = 'center';
+      const labelY = r.y - (selected ? 24 : 16);
+      const tw = bctx.measureText(r.name).width;
+      bctx.fillStyle = 'rgba(4,10,20,.55)';
+      bctx.fillRect(r.x - tw / 2 - 4, labelY - 10, tw + 8, 14);
+      bctx.fillStyle = dim ? 'rgba(200,218,245,.4)' : 'rgba(226,238,255,.96)';
+      bctx.fillText(r.name, r.x, labelY);
+      if (stats) {
+        bctx.fillStyle = dim ? 'rgba(150,170,200,.35)' : 'rgba(150,175,210,.7)';
+        bctx.font = '10px "Segoe UI","Microsoft YaHei",sans-serif';
+        bctx.fillText(stats.nodeCount + ' 节点' + (stats.activeCount ? ' · ' + stats.activeCount + ' 活跃' : ''), r.x, r.y + 24);
+      }
+      bctx.restore();
+    }
+
+    if (state.selected) {
+      const region = REGIONS.find((x) => x.id === state.selected);
+      const nodes = state.graph.nodes.filter((n) => n.region === state.selected).slice(0, 80);
+      nodes.forEach((n, i) => {
+        const a = i * 2.399 + (t || 0) / 6000;
+        const rr = 22 + Math.sqrt(i) * 8;
+        const x = region.x + Math.cos(a) * rr * 1.2;
+        const y = region.y + Math.sin(a) * rr * .8;
+        bctx.beginPath(); bctx.arc(x, y, 2.1 + Math.min(4, (Number(n.importance) || 20) / 40), 0, Math.PI * 2);
+        bctx.fillStyle = importanceColor(n.importance); bctx.globalAlpha = .9; bctx.fill(); bctx.globalAlpha = 1;
+      });
+      if (nodes.length) {
+        bctx.fillStyle = 'rgba(226,238,255,.8)';
+        bctx.font = '10px "Segoe UI","Microsoft YaHei",sans-serif';
+        bctx.textAlign = 'left';
+        bctx.fillText('展开 ' + nodes.length + ' 个相关节点', region.x + 50, region.y + 54);
+      }
+    }
+    bctx.restore();
+  }
+
+  function importanceColor(v) {
+    const x = Math.max(0, Math.min(100, Number(v) || 0)) / 100;
+    if (x < .35) return 'rgba(130,160,200,.7)';
+    if (x < .6) return '#63e2ff';
+    if (x < .8) return '#ffd166';
+    return '#ff7b9c';
+  }
+  function hexA(hex, a) {
+    const h = hex.replace('#', '');
+    const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+
+  function drawMood() {
+    const w = moodCanvas.clientWidth || 280, h = moodCanvas.clientHeight || 148;
+    mctx.clearRect(0, 0, w, h);
+    mctx.strokeStyle = 'rgba(120,170,255,.12)'; mctx.lineWidth = 1;
+    for (let i = 0; i <= 3; i++) { const y = 12 + (h - 30) * i / 3; mctx.beginPath(); mctx.moveTo(0, y); mctx.lineTo(w, y); mctx.stroke(); }
+    const points = state.moodPoints.length ? state.moodPoints : [{ t:Date.now(), valence:Number(state.live?.mood?.valence)||0, arousal:Number(state.live?.mood?.arousal)||0 }];
+    const t0 = points[0].t, t1 = points[points.length - 1].t || t0 + 1;
+    const px = (t) => 4 + (w - 8) * (t1 > t0 ? (t - t0) / (t1 - t0) : 0.5);
+    const py = (v) => 12 + (h - 30) * (1 - (Math.max(-1, Math.min(1, Number(v) || 0)) + 1) / 2);
+    const drawLine = (key, color, dashed) => {
+      mctx.beginPath();
+      points.forEach((p, i) => { const x = px(p.t), y = py(p[key]); if (i === 0) mctx.moveTo(x, y); else mctx.lineTo(x, y); });
+      mctx.strokeStyle = color; mctx.lineWidth = 1.8; mctx.setLineDash(dashed ? [4, 4] : []); mctx.stroke(); mctx.setLineDash([]);
+      const last = points[points.length - 1];
+      mctx.fillStyle = color; mctx.beginPath(); mctx.arc(px(last.t), py(last[key]), 3, 0, Math.PI * 2); mctx.fill();
+    };
+    mctx.beginPath();
+    points.forEach((p, i) => { const x = px(p.t), y = py(p.valence); if (i === 0) mctx.moveTo(x, y); else mctx.lineTo(x, y); });
+    mctx.lineTo(px(points[points.length - 1].t), h - 14); mctx.lineTo(px(points[0].t), h - 14); mctx.closePath();
+    const grad = mctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(99,226,255,.22)'); grad.addColorStop(1, 'rgba(99,226,255,0)');
+    mctx.fillStyle = grad; mctx.fill();
+    drawLine('valence', '#63e2ff', false);
+    drawLine('arousal', '#ff7b9c', true);
+    mctx.fillStyle = 'rgba(143,163,199,.8)'; mctx.font = '10px "Segoe UI","Microsoft YaHei",sans-serif';
+    mctx.fillText('+1', 2, 10); mctx.fillText('0', 2, h / 2); mctx.fillText('-1', 2, h - 16);
+    mctx.textAlign = 'right'; mctx.fillText('愉悦', w - 4, 10); mctx.fillStyle = 'rgba(255,123,156,.85)'; mctx.fillText('唤醒', w - 4, 22); mctx.textAlign = 'left';
+  }
+
+  function renderThoughts() {
+    const list = (state.thoughts || []).slice(-8).reverse();
+    $('thoughtCount').textContent = list.length ? ('最近 ' + list.length + ' 条') : '';
+    $('thoughts').innerHTML = list.map((t) => {
+      const kind = t.kind === 'dream' ? '梦' : t.kind === 'action' ? '行动' : '想';
+      return '<div class="thought"><b>' + kind + '</b>' + escapeHtml(String(t.text || '').slice(0, 110)) + '</div>';
+    }).join('') || '<div class="thought" style="color:#6f84a8">还没有内心活动</div>';
+  }
+
+  function renderCognition() {
+    const cog = state.cognition || {};
+    const sig = cog.signals || {};
+    const focus = cog.cognition && cog.cognition.focus;
+    const parts = [];
+    if (sig.clock) parts.push('真实时间：' + sig.clock + '（' + (sig.period || '') + '）');
+    if (focus && focus.label) parts.push('此刻注意力：' + focus.label);
+    if (cog.cognition && cog.cognition.time && cog.cognition.time.sinceInteractionText) parts.push('距上次说话 ' + cog.cognition.time.sinceInteractionText);
+    $('nowline').textContent = parts.join(' · ') || '真实时间加载中…';
+  }
+
+  function renderState() {
+    const mood = state.live?.mood || {};
+    const v = Number(mood.valence) || 0, a = Number(mood.arousal) || 0;
+    $('moodValence').textContent = (v >= 0 ? '+' : '') + v.toFixed(2);
+    $('moodArousal').textContent = a.toFixed(2);
+    const needs = state.live?.needs || {};
+    const labels = { social:'陪伴', curiosity:'好奇', rest:'休息', security:'安全感', esteem:'被重视' };
+    $('needs').innerHTML = Object.entries(labels).map(([k, label]) => {
+      const val = Math.max(0, Math.min(100, Number(needs[k]) || 0));
+      return '<div class="need"><span style="width:38px">' + label + '</span><span class="bar"><i style="width:' + val + '%"></i></span><span>' + Math.round(val) + '</span></div>';
+    }).join('');
+    drawMood();
+  }
+
+  function renderEvents() {
+    const list = state.events.slice(-10).reverse();
+    $('eventCount').textContent = '事件 ' + (state.live?.events || state.events.length) + ' 条';
+    $('events').innerHTML = list.map((ev) => {
+      const emo = (ev.emotions || []).map((x) => x.label || x.type).slice(0, 3).join(' ');
+      const text = (ev.text || ev.summary || '').replace(/\s+/g, ' ').slice(0, 110);
+      const t = String(ev.at || '').slice(11, 19);
+      return '<div class="event"><b>' + t + '</b> ' + escapeHtml(text) + (emo ? ' <span style="color:#8fa6cc">[' + escapeHtml(emo) + ']</span>' : '') + '</div>';
+    }).join('');
+  }
+
+  function sizeMini() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = mini.clientWidth || 340, h = mini.clientHeight || 250;
+    mini.width = w * dpr; mini.height = h * dpr;
+    minictx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  window.addEventListener('error', (e) => { try { $('meta').textContent = 'JS错误：' + (e.message || 'unknown'); } catch {} });
+  function openRegion(id) {
+    state.selected = id;
+    const r = REGIONS.find((x) => x.id === id);
+    if (!r) return;
+    const stats = state.regions.find((x) => x.id === id) || { nodeCount:0, activeCount:0, importanceAvg:0, eventCount:0, metrics:{} };
+    $('regionName').textContent = r.name + ' · ' + r.desc;
+    $('regionDesc').textContent = '这是她在“' + r.name + '”这一刻的真实活动。节点来自记忆图谱，颜色越亮表示她觉得越重要。';
+    $('regionStats').innerHTML = [['节点', stats.nodeCount], ['活跃', stats.activeCount], ['近24h事件', stats.eventCount || 0]]
+      .map(([k, v]) => '<div class="stat"><b>' + v + '</b><span>' + k + '</span></div>').join('');
+    const metrics = stats.metrics && Object.keys(stats.metrics).length ? stats.metrics : { 重要度均值: stats.importanceAvg || 0 };
+    $('regionMetrics').innerHTML = Object.entries(metrics).map(([k, v]) => '<span>' + escapeHtml(k) + '：' + v + '</span>').join('');
+    if (Array.isArray(stats.emotionList) && stats.emotionList.length) {
+      $('regionMetrics').innerHTML += stats.emotionList.map((e) => '<span>' + escapeHtml(e.label || e.type) + ' ' + Math.round((e.intensity || 0) * 100) + '%</span>').join('');
+    }
+    $('regionPanel').classList.add('open');
+    sizeMini();
+    drawMini();
+    drawBrain(performance.now());
+  }
+  function closeRegion() {
+    state.selected = null;
+    $('regionPanel').classList.remove('open');
+    drawBrain(performance.now());
+  }
+
+  function drawMini() {
+    const w = mini.clientWidth || 340, h = mini.clientHeight || 250;
+    minictx.clearRect(0, 0, w, h);
+    const nodes = state.graph.nodes.filter((n) => n.region === state.selected);
+    const ids = new Set(nodes.map((n) => n.id));
+    const edges = state.graph.edges.filter((e) => ids.has(e.from) || ids.has(e.to));
+    if (!nodes.length) {
+      minictx.fillStyle = 'rgba(143,166,204,.75)'; minictx.font = '12px "Segoe UI","Microsoft YaHei",sans-serif'; minictx.textAlign = 'center';
+      minictx.fillText('这个脑区暂时没有记忆节点，更多是“状态”', w / 2, h / 2 - 6);
+      minictx.fillText('等她在 QQ 里聊起来，这里会慢慢长出来', w / 2, h / 2 + 16);
+      return;
+    }
+    const cx = w / 2, cy = h / 2;
+    const positions = new Map();
+    nodes.forEach((n, i) => {
+      const a = i * 2.399; const rr = 18 + Math.sqrt(i) * (Math.min(w, h) / 18);
+      positions.set(n.id, { x: cx + Math.cos(a) * rr * 1.05, y: cy + Math.sin(a) * rr * .78, n });
+    });
+    minictx.strokeStyle = 'rgba(130,180,255,.22)'; minictx.lineWidth = 1;
+    for (const e of edges) {
+      const a = positions.get(e.from), b = positions.get(e.to); if (!a || !b) continue;
+      minictx.beginPath(); minictx.moveTo(a.x, a.y); minictx.lineTo(b.x, b.y); minictx.stroke();
+    }
+    for (const p of positions.values()) {
+      const imp = Number(p.n.importance) || 20;
+      const r = 2.4 + Math.min(4, imp / 30);
+      minictx.beginPath(); minictx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      minictx.fillStyle = importanceColor(imp); minictx.fill();
+      if (imp >= 80 || p.n.type === 'person') {
+        minictx.fillStyle = 'rgba(226,238,255,.85)'; minictx.font = '10px "Segoe UI","Microsoft YaHei",sans-serif';
+        minictx.fillText(String(p.n.label || '').slice(0, 14), p.x + r + 2, p.y + 3);
+      }
+    }
+    minictx.fillStyle = 'rgba(143,166,204,.7)'; minictx.font = '10px "Segoe UI","Microsoft YaHei",sans-serif';
+    minictx.fillText(nodes.length + ' 节点 · ' + edges.length + ' 连线', 8, h - 8);
+  }
+
+  function toLocal(ev) {
+    const { cx, cy, s } = brainTransform();
+    return { x: (ev.clientX - cx) / s, y: (ev.clientY - cy) / s };
+  }
+  function hitRegion(ev) {
+    const p = toLocal(ev);
+    let best = null, bestD = 1e9;
+    for (const r of REGIONS) {
+      const d = Math.hypot(p.x - r.x, p.y - r.y);
+      if (d < bestD) { bestD = d; best = r; }
+    }
+    return bestD < 78 ? best : null;
+  }
+  brainCanvas.addEventListener('mousemove', (ev) => {
+    const r = hitRegion(ev);
+    state.hover = r ? r.id : null;
+    brainCanvas.style.cursor = r ? 'pointer' : 'crosshair';
+    drawBrain(performance.now());
+  });
+  brainCanvas.addEventListener('click', (ev) => {
+    const r = hitRegion(ev);
+    if (r) openRegion(r.id); else closeRegion();
+  });
+  $('btnCloseRegion').onclick = closeRegion;
+  $('btnBack').onclick = closeRegion;
+  $('btnOverview').onclick = closeRegion;
+  $('btnRefresh').onclick = () => loadAll(true);
+
+  async function loadAll(force) {
+    try {
+      const [stateData, graphData, regionsData, eventData, moodData, cognitionData, thoughtsData] = await Promise.all([
+        fetchJson(API_BASE + '/state'),
+        fetchJson(API_BASE + '/graph'),
+        fetchJson(API_BASE + '/regions'),
+        fetchJson(API_BASE + '/events?limit=40'),
+        fetchJson(API_BASE + '/mood-history?hours=24'),
+        fetchJson(API_BASE + '/cognition'),
+        fetchJson(API_BASE + '/thoughts?limit=8'),
+      ]);
+      state.live = { mood: stateData.state?.affect?.mood, needs: stateData.state?.affect?.needs, physiology: stateData.state?.affect?.physiology, updatedAt: stateData.state?.updatedAt, events: stateData.state?.stats?.events };
+      state.graph = graphData;
+      state.regions = regionsData.regions || [];
+      state.events = eventData.events || [];
+      state.moodPoints = moodData.points || [];
+      state.cognition = cognitionData || {};
+      state.thoughts = thoughtsData.thoughts || [];
+      renderCognition(); renderThoughts();
+      const conf = graphData.stats || {};
+      $('meta').textContent = '节点 ' + (conf.nodes || state.graph.nodes.length) + ' · 连线 ' + (conf.edges || state.graph.edges.length) + ' · 同步 ' + (graphData.updatedAt ? String(graphData.updatedAt).slice(11, 19) : '—');
+      $('liveStatus').textContent = '● 实时'; $('liveStatus').style.color = '#8affc1';
+      renderState(); renderEvents(); drawBrain(performance.now());
+      if (state.selected) openRegion(state.selected);
+      $('empty').style.display = state.graph.nodes.length ? 'none' : 'flex';
+      if (force) $('meta').textContent += ' · 已刷新';
+    } catch (error) {
+      $('meta').textContent = '加载失败：' + (error && error.message ? error.message : error);
+      $('liveStatus').textContent = '● 离线'; $('liveStatus').style.color = '#ff7b9c';
+    }
+  }
+
+  function applyLive(data) {
+    if (!data) return;
+    state.live = { ...(state.live || {}), mood: data.mood, needs: data.needs, physiology: data.physiology, updatedAt: data.updatedAt, events: data.events };
+    const now = Date.now();
+    const last = state.moodPoints[state.moodPoints.length - 1];
+    if (!last || now - last.t > 12000) state.moodPoints.push({ t:now, valence:Number(data.mood?.valence)||0, arousal:Number(data.mood?.arousal)||0 });
+    if (state.moodPoints.length > 240) state.moodPoints = state.moodPoints.slice(-240);
+    renderState();
+    $('liveStatus').textContent = '● 实时'; $('liveStatus').style.color = '#8affc1';
+  }
+
+  function startLive() {
+    if (state.es) { try { state.es.close(); } catch {} state.es = null; }
+    if (API_BASE === '/api/brain' && window.EventSource) {
+      try {
+        state.es = new EventSource(API_BASE + '/stream' + (BRAIN_TOKEN ? '?token=' + encodeURIComponent(BRAIN_TOKEN) : ''));
+        state.es.onmessage = (ev) => { try { state.lastLiveAt = Date.now(); applyLive(JSON.parse(ev.data)); } catch {} };
+        state.es.onerror = () => { $('liveStatus').textContent = '● 重连中'; $('liveStatus').style.color = '#ffd166'; };
+      } catch {}
+    }
+    if (state.timer) clearInterval(state.timer);
+    state.timer = setInterval(async () => {
+      try {
+        const [s, ev] = await Promise.all([fetchJson(API_BASE + '/state'), fetchJson(API_BASE + '/events?limit=40')]);
+        state.live = { mood:s.state?.affect?.mood, needs:s.state?.affect?.needs, physiology:s.state?.affect?.physiology, updatedAt:s.state?.updatedAt, events:s.state?.stats?.events };
+        state.events = ev.events || [];
+        applyLive({ mood:state.live.mood, needs:state.live.needs, physiology:state.live.physiology, updatedAt:state.live.updatedAt, events:state.live.events });
+        renderEvents();
+      } catch {}
+    }, 5000);
+    setInterval(() => { if (!state.selected) loadAll(false); }, 30000);
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  }
+
+  function loop(t) {
+    if (state.hover || state.selected || Math.floor(t / 120) % 2 === 0) drawBrain(t);
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  loadAll(false);
+  startLive();
+  setInterval(async () => {
+    try {
+      const [cog, th] = await Promise.all([fetchJson(API_BASE + '/cognition'), fetchJson(API_BASE + '/thoughts?limit=8')]);
+      state.cognition = cog; state.thoughts = th.thoughts || [];
+      renderCognition(); renderThoughts();
+    } catch {}
+  }, 20000);
+  const initialRegion = new URLSearchParams(location.search).get('region');
+  if (initialRegion) setTimeout(() => { try { openRegion(initialRegion); } catch {} }, 1400);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
