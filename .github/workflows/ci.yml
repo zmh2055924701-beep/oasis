@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax check
+        run: |
+          node --check src/bridge.js
+          node --check plugins/oasis/lib/index.js
+          node --check plugins/oasis/lib/client.js
+      - name: Client contract
+        run: node plugins/oasis/scripts/test-client-contract.mjs
+      - name: Privacy scan
+        run: node scripts/privacy-scan.mjs --strict
