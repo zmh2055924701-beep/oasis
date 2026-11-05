@@ -10,6 +10,24 @@ import { createEmptySelfModel, dayKey, clip, resolveMemoryV3Dir } from './schema
 function docText(x) {
   return [x.title, x.summary, x.text, x.topic, x.object, x.reaction, x.whyWatched, x.quotes?.join(' ')].filter(Boolean).join(' ');
 }
+
+// LLM/DSH results can occasionally arrive as an object (or an object-shaped
+// text block) instead of a plain string. Never persist "[object Object]".
+function completionText(value) {
+  if (typeof value === 'string') return value;
+  if (value == null) return '';
+  if (typeof value !== 'object') return String(value);
+  if (typeof value.text === 'string') return value.text;
+  if (typeof value.content === 'string') return value.content;
+  if (Array.isArray(value.content)) {
+    return value.content.map((part) => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part.text === 'string') return part.text;
+      return '';
+    }).join('');
+  }
+  try { return JSON.stringify(value); } catch { return ''; }
+}
 function buildSelfModel({ characterId, episodes, facts, media, reflections, now }) {
   const model = createEmptySelfModel(characterId);
   const commitments = (facts || []).filter((f) => /承诺|计划/.test(f.predicate)).slice(-40).map((f) => ({
@@ -156,8 +174,8 @@ export async function runSleepLearning({
         maxTokens: 220,
         temperature: 0.5,
       });
-      const clean = String(text?.text || text || '').trim();
-      if (clean) reflection.summary = clip(clean, 1200);
+      const clean = completionText(text?.text ?? text).trim();
+      if (clean && !/^\[object Object\]$/.test(clean)) reflection.summary = clip(clean, 1200);
     } catch {}
   }
   const reflections = store.upsert(store.readReflections(), [reflection]);
@@ -197,6 +215,6 @@ export async function runSleepLearning({
       }
     } catch {}
   }
-  store.saveState({ lastSleepDay: day, lastSleepAt: new Date(now).toISOString(), lastSleepStats: { ingested, vectors, reflection: reflection.summary.slice(0, 120) } });
+  store.saveState({ lastSleepDay: day, lastSleepAt: new Date(now).toISOString(), lastSleepStats: { ingested, vectors, reflection: String(reflection.summary || '').slice(0, 120) } });
   return { ok: true, day, ingested, vectors, reflection, selfModel, stats: store.status() };
 }
