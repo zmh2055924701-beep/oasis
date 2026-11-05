@@ -415,13 +415,13 @@ export function apply(ctx) {
           const owner = petChat.ownerInfo();
           const address = owner.name && owner.name !== '主人' ? owner.name : '爸';
           const memory = petChat.memoryBlock();
-          const system = '你是' + (role.name || '她') + '。现在是' + address + '在看你。用第一人称、口语、短句、带一点撒娇/傲娇，直接问' + address + '“可以嘛 / 让我去嘛”。'
-            + '不要叫“主人”，不要提“审批/额度/短码/系统/已记下”，不要说教，不要写格式说明。40~120 字，1~2 句话。';
+          const system = '你是' + (role.name || '她') + '。现在是' + address + '在看你。用第一人称、口语、短句，像平时一样自然地说出此刻的想法。'
+            + '不要使用固定开场或固定结尾，不要每次都用“可以嘛/让我去嘛”这类同一种问法；不要像系统申请，不要提“审批/额度/短码/系统/已记下”，不要输出括号提示。40~120 字，1~2 句话。';
           const user = [
             '你此刻的情绪/需求：好奇 ' + Math.round(state.curiosity) + '、精力 ' + Math.round(state.energy) + '、疲劳 ' + Math.round(state.fatigue) + '、社交 ' + Math.round(state.social) + '、表达 ' + Math.round(state.expression * 100) + '%。',
             '你想做的事：' + label + '（' + reason + '）。',
             '最近记得的事：' + String(memory || '').slice(0, 1200),
-            '用你自己的语气，短一点，像在撒娇或小声问：你想做什么、为什么、大概会说什么，结尾问' + address + '可不可以。',
+            '根据此刻的情绪和具体事由，换一种和平时不同的说法自然地问' + address + '；把想做什么、为什么想、大概会说什么揉进日常语气里。',
           ].join('\n');
           const result = await petChat.complete({ system, user, maxTokens: 220, temperature: 1 });
           return String(result?.text || '')

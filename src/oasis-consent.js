@@ -61,5 +61,5 @@ export function formatConsentMessage({ natural = '', request }) {
     .replace(/审批|额度|短码|Oasis|系统通知/g, '')
     .replace(/\s{2,}/g, ' ')
     .trim();
-  return body + '\n\n（想让我去就回「允许」或「可以」；不想就回「拒绝」或「不行」）';
+  return body;
 }
