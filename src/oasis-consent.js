@@ -12,7 +12,7 @@ export function makeConsentCode(length = 4) {
 export function actionHash(action, content) {
   return crypto.createHash('sha256').update(String(action) + '\u0000' + String(content ?? '')).digest('hex');
 }
-export function createConsentRequest({ id = '', action, content = '', now = Date.now(), ttlMs = 5 * 60_000, kind = 'bili' } = {}) {
+export function createConsentRequest({ id = '', action, content = '', now = Date.now(), ttlMs = 10 * 60_000, kind = 'bili' } = {}) {
   const code = makeConsentCode();
   const actionId = id || ('oc_' + crypto.randomUUID());
   const hash = actionHash(action, content);
