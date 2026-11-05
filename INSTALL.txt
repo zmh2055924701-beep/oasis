@@ -1,0 +1,24 @@
+﻿Oasis public bundle
+===================
+
+Requirements:
+- Windows 10/11
+- Node.js 22.13 or newer
+- DeepSeek Harness (DSH)
+- SnowLuma 2 is required only for QQ, and is NOT included.
+
+Install:
+1. Put this folder somewhere stable (e.g. D:Oasis).
+2. Open PowerShell in this folder.
+3. Run: npm install
+4. Run: node scriptssetup-dsh.mjs
+5. Restart DSH.
+6. Open Settings -> Oasis.
+
+Optional QQ:
+- Install SnowLuma 2 separately and log in.
+
+Notes:
+- This zip includes vendor/semantic (memory embeddings) and vendor/dsh-pet.
+- It does NOT include node_modules. npm install is required.
+- It does NOT include any personal memory, character, QQ or Bilibili data.
