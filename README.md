@@ -1,4 +1,4 @@
-# Oasis
+﻿# Oasis
 
 **一个身份，多个身体。**
 
@@ -72,7 +72,7 @@ Oasis 让 QQ、B 站和桌宠共用同一套人格、记忆与情绪。
 不想用 git 的话，直接下载 Release 里的完整包：
 
 ```text
-oasis-v0.9.1-public.zip
+oasis-v0.9.2-public.zip
 ```
 
 它已经包含源码、`vendor/semantic` 和 `vendor/dsh-pet`，解压即可继续安装。  
