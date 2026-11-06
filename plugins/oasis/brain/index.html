@@ -1,585 +1,1386 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>她的大脑 · 赛博脑区</title>
+<title>她的大脑 · 关系网络</title>
 <style>
   :root {
-    --bg:#050913; --panel:rgba(10,18,32,.82); --line:rgba(110,170,255,.22);
-    --text:#e6efff; --muted:#8fa6cc; --cyan:#63e2ff; --gold:#ffd166;
-    --pink:#ff7b9c; --green:#8affc1; --purple:#b28cff;
+    --bg: #050b15;
+    --bg2: #081321;
+    --panel: rgba(8, 18, 31, .88);
+    --panel2: rgba(12, 26, 43, .82);
+    --line: rgba(116, 169, 224, .17);
+    --line2: rgba(116, 169, 224, .30);
+    --text: #e9f1ff;
+    --muted: #8b9fbb;
+    --faint: #657894;
+    --cyan: #73dcff;
+    --gold: #ffd37b;
+    --pink: #ff92ae;
+    --green: #8ef0c2;
+    --purple: #bfa0ff;
+    --blue: #78b9ef;
   }
-  * { box-sizing:border-box; }
-  html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--text);
-    font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif; }
-  #bg { position:fixed; inset:0; width:100%; height:100%; z-index:0; }
-  #brainCanvas { position:fixed; inset:0; width:100%; height:100%; cursor:crosshair; z-index:1; }
-  .panel { position:fixed; background:rgba(10,18,32,.96); border:1px solid var(--line); border-radius:16px;
-    box-shadow:0 18px 60px rgba(0,0,0,.5); z-index:100; transform:translateZ(0); will-change:transform; }
-  #topbar { z-index:110; top:16px; left:20px; right:20px; display:flex; align-items:flex-start; justify-content:space-between; pointer-events:none; z-index:11; }
-  #title { pointer-events:auto; background:linear-gradient(120deg,rgba(8,16,30,.92),rgba(8,16,30,.55));
-    border:1px solid var(--line); border-radius:14px; padding:12px 16px; }
-  #title h1 { margin:0; font-size:17px; letter-spacing:.6px; }
-  #title h1 span { color:var(--cyan); font-weight:400; font-size:11px; margin-left:8px; }
-  #title .sub { color:var(--muted); font-size:11px; margin-top:4px; }
-  #rightTools { display:flex; gap:8px; align-items:center; pointer-events:auto; }
-  #rightTools .status { color:var(--muted); font-size:11px; margin-right:6px; }
-  button { background:rgba(16,30,52,.88); color:#d7e6ff; border:1px solid var(--line); border-radius:9px;
-    padding:7px 11px; font-size:12px; cursor:pointer; transition:border-color .2s,color .2s; }
-  button:hover { border-color:var(--cyan); color:#fff; }
-  #left { top:86px; left:20px; width:310px; padding:14px 15px; }
-  #left h2 { margin:0 0 8px; font-size:13px; color:var(--cyan); font-weight:600; letter-spacing:.4px; }
-  #moodChart { width:100%; height:148px; display:block; }
-  #moodNow { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:4px; }
-  #moodNow b { color:var(--text); font-weight:600; }
-  .needs { margin-top:12px; display:grid; gap:6px; }
-  .need { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--muted); }
-  .need .bar { flex:1; height:6px; background:#16233b; border-radius:4px; overflow:hidden; }
-  .need .bar i { display:block; height:100%; width:50%; border-radius:4px; background:linear-gradient(90deg,#2a5c9e,var(--cyan)); transition:width .8s; }
-  .thoughtsHead { margin-top:12px; font-size:11px; color:var(--muted); display:flex; justify-content:space-between; }
-  .thoughts { margin-top:6px; display:flex; flex-direction:column; gap:4px; max-height:120px; overflow:auto; }
-  .thought { font-size:11px; color:#cfe0ff; line-height:1.45; border-left:2px solid #3d639b; padding-left:7px; }
-  .thought b { color:var(--cyan); font-weight:500; margin-right:4px; }
-  #brainHint { position:fixed; left:20px; bottom:154px; width:300px; color:var(--muted); font-size:11px; line-height:1.6;
-    background:rgba(8,14,26,.6); border:1px solid var(--line); border-radius:12px; padding:9px 12px; z-index:9; }
-  #regionPanel { top:86px; right:20px;  width:380px; max-height:calc(100vh - 180px); padding:14px 16px; display:none; overflow:auto; }
-  #regionPanel.open { display:block; }
-  #regionPanel .rh { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-  #regionPanel h2 { margin:0; font-size:15px; color:var(--cyan); }
-  #regionPanel .desc { color:var(--muted); font-size:11px; margin:4px 0 10px; }
-  #regionStats { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:10px; }
-  #regionStats .stat { background:rgba(20,36,60,.6); border:1px solid rgba(110,170,255,.16); border-radius:10px; padding:7px 9px; }
-  #regionStats .stat b { display:block; font-size:15px; color:var(--text); }
-  #regionStats .stat span { font-size:10px; color:var(--muted); }
-  #regionMetrics { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
-  #regionMetrics span { font-size:10px; color:#bcd2f5; border:1px solid rgba(110,170,255,.18); background:rgba(20,36,60,.5); border-radius:8px; padding:3px 7px; }
-  #miniGraph { width:100%; height:250px; background:rgba(4,9,18,.55); border:1px solid var(--line); border-radius:12px; display:block; }
-  #regionPanel .back { margin-top:10px; width:100%; }
-  #timeline { left:20px; right:20px; bottom:16px; padding:10px 14px; height:124px; display:flex; flex-direction:column; gap:6px; }
-  #timeline .head { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); }
-  #events { flex:1; overflow:auto; display:flex; flex-direction:column; gap:3px; }
-  .event { font-size:12px; color:#e6efff; border-left:2px solid #3d639b; padding-left:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .event b { color:var(--cyan); font-weight:500; }
-  #empty { position:fixed; inset:0; display:none; align-items:center; justify-content:center; color:var(--muted);
-    font-size:14px; line-height:1.8; text-align:center; z-index:8; pointer-events:none; }
-  @media (max-width:1180px) { #regionPanel { width:330px; } #left { width:280px; } }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input { font: inherit; }
+  button { cursor: pointer; }
+  #app { width: 100%; height: 100%; display: flex; flex-direction: column; min-height: 0; }
+  #topbar {
+    height: 68px; flex: 0 0 68px; display: flex; align-items: center; gap: 22px;
+    padding: 0 20px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(10, 24, 40, .98), rgba(6, 15, 27, .92));
+    position: relative; z-index: 40;
+  }
+  .brand { min-width: 216px; }
+  .brand .kicker {
+    color: var(--cyan); font-size: 9px; letter-spacing: .20em; text-transform: uppercase;
+    font-weight: 700; margin-bottom: 4px;
+  }
+  .brand h1 { margin: 0; font-size: 17px; letter-spacing: .08em; font-weight: 600; }
+  .brand h1 span { color: var(--muted); font-size: 11px; letter-spacing: .04em; font-weight: 400; margin-left: 8px; }
+  .topmeta { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+  .topmeta #meta { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #syncPill {
+    display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line);
+    border-radius: 999px; padding: 5px 9px; font-size: 10px; color: var(--muted); white-space: nowrap;
+    background: rgba(12, 28, 45, .65);
+  }
+  #syncDot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .topactions { display: flex; align-items: center; gap: 8px; position: relative; }
+  .searchWrap { position: relative; width: 220px; }
+  #search {
+    width: 100%; height: 32px; border-radius: 8px; border: 1px solid var(--line);
+    background: rgba(6, 15, 26, .9); color: var(--text); padding: 0 11px 0 30px; outline: none;
+    font-size: 12px; transition: border-color .2s, box-shadow .2s;
+  }
+  #search:focus { border-color: rgba(115, 220, 255, .55); box-shadow: 0 0 0 2px rgba(115, 220, 255, .08); }
+  .searchIcon { position: absolute; left: 10px; top: 8px; color: var(--faint); font-size: 12px; pointer-events: none; }
+  #searchResults {
+    position: absolute; top: 38px; left: 0; right: 0; background: #0b1828;
+    border: 1px solid var(--line2); border-radius: 10px; padding: 5px; display: none;
+    max-height: 260px; overflow: auto; z-index: 100; box-shadow: 0 18px 40px rgba(0,0,0,.45);
+  }
+  #searchResults.open { display: block; }
+  .searchResult { padding: 7px 8px; border-radius: 6px; cursor: pointer; font-size: 12px; color: #cfe2f6; }
+  .searchResult:hover { background: rgba(76, 142, 205, .17); }
+  .searchResult small { color: var(--faint); margin-left: 7px; font-size: 10px; }
+  button.ghost {
+    height: 32px; border-radius: 8px; border: 1px solid var(--line); color: #cfe2f6;
+    background: rgba(10, 24, 40, .78); padding: 0 12px; font-size: 12px; white-space: nowrap;
+  }
+  button.ghost:hover { border-color: rgba(115, 220, 255, .52); color: #fff; }
+  #main { display: grid; grid-template-columns: 318px minmax(0, 1fr); flex: 1 1 auto; min-height: 0; }
+  #sidebar {
+    min-height: 0; overflow: auto; border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(7, 17, 30, .96), rgba(5, 12, 23, .98));
+    padding: 14px 14px 20px; z-index: 12;
+  }
+  #sidebar::-webkit-scrollbar, #events::-webkit-scrollbar, #thoughts::-webkit-scrollbar,
+  #detailPanel::-webkit-scrollbar, #searchResults::-webkit-scrollbar { width: 5px; }
+  #sidebar::-webkit-scrollbar-thumb, #events::-webkit-scrollbar-thumb, #thoughts::-webkit-scrollbar-thumb,
+  #detailPanel::-webkit-scrollbar-thumb, #searchResults::-webkit-scrollbar-thumb { background: rgba(115, 170, 220, .22); border-radius: 4px; }
+  .sideBlock { margin-bottom: 14px; }
+  .sideHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+  .sideHead h2 { margin: 0; font-size: 11px; color: #b8cbe0; font-weight: 600; letter-spacing: .08em; }
+  .sideHead .sub { color: var(--faint); font-size: 10px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--faint); font-size: 10px; padding: 3px 7px; }
+  .seg button.active { background: rgba(115, 220, 255, .13); color: var(--cyan); }
+  #moodChart { width: 100%; height: 112px; display: block; border-radius: 8px; background: rgba(4, 12, 22, .42); }
+  .moodLegend { display: flex; justify-content: space-between; margin-top: 5px; font-size: 10px; color: var(--faint); }
+  .moodLegend b { font-weight: 500; color: #d7e9fb; }
+  #needs { margin-top: 8px; display: grid; gap: 5px; }
+  .need { display: grid; grid-template-columns: 38px minmax(0, 1fr) 26px; gap: 7px; align-items: center; font-size: 10px; color: var(--muted); }
+  .need .bar { height: 4px; background: rgba(125, 166, 215, .11); border-radius: 3px; overflow: hidden; }
+  .need .bar i { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, #3a7bb0, var(--cyan)); transition: width .35s ease; }
+  .need .val { text-align: right; color: #b9cde2; font-variant-numeric: tabular-nums; }
+  #thoughts { display: flex; flex-direction: column; gap: 7px; max-height: 212px; overflow: auto; padding-right: 2px; }
+  .thoughtCard {
+    border-left: 2px solid rgba(112, 186, 234, .45); padding: 5px 0 5px 9px;
+    color: #c9dcf1; font-size: 11.5px; line-height: 1.55;
+  }
+  .thoughtCard .meta { display: flex; gap: 7px; align-items: center; margin-bottom: 2px; color: var(--faint); font-size: 9.5px; }
+  .thoughtCard .kind { color: var(--cyan); }
+  .thoughtCard .emotion { color: var(--pink); }
+  #events { display: flex; flex-direction: column; gap: 7px; max-height: 258px; overflow: auto; padding-right: 2px; }
+  .eventCard {
+    background: rgba(12, 27, 45, .62); border: 1px solid rgba(116, 169, 224, .12);
+    border-radius: 8px; padding: 7px 8px; cursor: default;
+  }
+  .eventCard .row1 { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .eventCard .time { color: var(--cyan); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .eventCard .tag {
+    font-size: 9px; color: #9eb8d5; background: rgba(91, 134, 183, .15);
+    padding: 1px 5px; border-radius: 4px; white-space: nowrap;
+  }
+  .eventCard .body { color: #d5e5f5; font-size: 11.5px; line-height: 1.5; word-break: break-word; }
+  .eventCard .assess { color: var(--faint); font-size: 10px; line-height: 1.45; margin-top: 4px; }
+  .eventCard .emotion { color: #e9abc0; }
+  .emptyLine { color: var(--faint); font-size: 11px; padding: 8px 2px; }
+  #stage {
+    position: relative; min-width: 0; min-height: 0; overflow: hidden;
+    background:
+      radial-gradient(ellipse at 57% 49%, rgba(26, 53, 88, .30), transparent 58%),
+      radial-gradient(ellipse at 50% 50%, rgba(8, 22, 41, .74), rgba(3, 8, 16, .98) 78%);
+  }
+  #graphCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  #graphCanvas.dragging { cursor: grabbing; }
+  #stageHud {
+    position: absolute; left: 18px; bottom: 16px; z-index: 8; pointer-events: none;
+    color: var(--faint); font-size: 10px; line-height: 1.7;
+    background: rgba(4, 12, 22, .46); border: 1px solid rgba(116, 169, 224, .10);
+    border-radius: 8px; padding: 7px 10px; max-width: 410px;
+  }
+  #stageHud b { color: #b8d7ed; font-weight: 500; }
+  #filters { position: absolute; top: 16px; left: 18px; z-index: 10; display: flex; flex-wrap: wrap; gap: 5px; max-width: calc(100% - 400px); }
+  .chip {
+    border: 1px solid rgba(116, 169, 224, .16); background: rgba(7, 17, 29, .76);
+    color: #8faac5; border-radius: 999px; padding: 5px 9px; font-size: 10px;
+  }
+  .chip:hover { color: #d8ecfb; border-color: rgba(116, 169, 224, .35); }
+  .chip.active { color: #dff8ff; border-color: rgba(115, 220, 255, .52); background: rgba(37, 95, 129, .26); }
+  #stageInfo { position: absolute; top: 17px; right: 18px; z-index: 8; color: var(--faint); font-size: 10px; text-align: right; pointer-events: none; line-height: 1.6; }
+  #stageInfo b { color: #b8cde1; font-weight: 500; }
+  #legend {
+    position: absolute; right: 18px; bottom: 16px; z-index: 8; display: flex; flex-wrap: wrap; gap: 9px;
+    color: var(--faint); font-size: 9.5px; background: rgba(4, 12, 22, .46);
+    border: 1px solid rgba(116, 169, 224, .10); border-radius: 8px; padding: 7px 10px; max-width: 330px;
+  }
+  #legend span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+  #tooltip {
+    position: absolute; z-index: 30; pointer-events: none; display: none; max-width: 260px;
+    border: 1px solid rgba(129, 197, 240, .28); background: rgba(5, 16, 29, .96);
+    color: #dcecff; border-radius: 8px; padding: 8px 10px; font-size: 11px; line-height: 1.55;
+    box-shadow: 0 10px 30px rgba(0,0,0,.38);
+  }
+  #tooltip .ttTitle { color: #f1f8ff; font-weight: 600; margin-bottom: 3px; }
+  #tooltip .ttMeta { color: var(--faint); font-size: 10px; }
+  #detailPanel {
+    position: absolute; top: 16px; right: 16px; bottom: 16px; width: 370px; z-index: 20;
+    display: flex; flex-direction: column; padding: 15px 16px; overflow: auto;
+    background: linear-gradient(180deg, rgba(10, 24, 40, .98), rgba(6, 15, 27, .98));
+    border: 1px solid rgba(116, 169, 224, .20); border-radius: 12px;
+    box-shadow: 0 20px 55px rgba(0, 0, 0, .42);
+    transform: translateX(calc(100% + 28px)); opacity: 0; transition: transform .22s ease, opacity .22s ease;
+    pointer-events: none;
+  }
+  #detailPanel.open { transform: translateX(0); opacity: 1; pointer-events: auto; }
+  #detailPanel .dpHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  #detailPanel .dpType { color: var(--cyan); font-size: 10px; letter-spacing: .08em; margin-bottom: 3px; }
+  #detailPanel h2 { margin: 0; font-size: 16px; line-height: 1.35; font-weight: 600; }
+  #detailPanel .dpClose { border: 0; background: transparent; color: var(--faint); font-size: 19px; line-height: 1; padding: 1px 3px; }
+  #detailPanel .dpClose:hover { color: #fff; }
+  #detailPanel .dpTags { display: flex; flex-wrap: wrap; gap: 5px; margin: 5px 0 12px; }
+  #detailPanel .dpTag { font-size: 9.5px; color: #a9c4dd; border: 1px solid rgba(116, 169, 224, .16); border-radius: 4px; padding: 2px 5px; }
+  #detailPanel .dpText {
+    color: #d4e5f5; font-size: 12.5px; line-height: 1.7; white-space: pre-wrap; word-break: break-word;
+    background: rgba(14, 31, 51, .62); border: 1px solid rgba(116, 169, 224, .11); border-radius: 8px; padding: 10px 11px;
+  }
+  #detailPanel .dpSection { margin-top: 15px; }
+  #detailPanel .dpSection h3 { margin: 0 0 7px; font-size: 10px; color: var(--faint); letter-spacing: .07em; font-weight: 500; }
+  .linkRow {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    border-radius: 6px; padding: 6px 7px; cursor: pointer; color: #c8dcf0; font-size: 11px;
+  }
+  .linkRow:hover { background: rgba(78, 138, 196, .14); }
+  .linkRow .rtype { color: var(--faint); font-size: 9.5px; }
+  .linkRow .lbar { color: var(--faint); font-size: 9px; font-variant-numeric: tabular-nums; }
+  .dpAction { width: 100%; margin-top: 15px; height: 32px; border: 1px solid rgba(115, 220, 255, .26); border-radius: 7px; background: rgba(37, 95, 129, .20); color: #cdefff; font-size: 11px; }
+  .dpAction:hover { border-color: rgba(115, 220, 255, .55); }
+  #empty {
+    position: absolute; inset: 0; z-index: 6; display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 8px; color: var(--muted); font-size: 13px; text-align: center; pointer-events: none;
+  }
+  #empty b { color: #d4e5f5; font-weight: 500; }
+  @media (max-width: 1180px) {
+    #main { grid-template-columns: 286px minmax(0, 1fr); }
+    #topbar { gap: 12px; padding: 0 14px; }
+    .brand { min-width: 190px; }
+    .searchWrap { width: 170px; }
+    #detailPanel { width: 330px; }
+    #filters { max-width: calc(100% - 355px); }
+  }
+  @media (max-width: 900px) {
+    #main { grid-template-columns: 250px minmax(0, 1fr); }
+    .topmeta { display: none; }
+    .brand { min-width: 180px; }
+    #detailPanel { width: 300px; }
+  }
 </style>
 </head>
 <body>
-<canvas id="bg"></canvas>
-<canvas id="brainCanvas"></canvas>
-
-<div id="topbar">
-  <div id="title">
-    <h1>她的大脑 <span>CYBER BRAIN · 实时</span></h1>
-    <div class="sub" id="meta">连接中…</div>
-    <div class="sub" id="nowline">真实时间加载中…</div>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">
+      <div class="kicker">OASIS BRAIN / LIVE</div>
+      <h1>她的大脑 <span>关系网络</span></h1>
+    </div>
+    <div class="topmeta">
+      <span id="meta">连接中…</span>
+      <span id="syncPill"><i id="syncDot"></i><span id="syncText">同步中</span></span>
+    </div>
+    <div class="topactions">
+      <div class="searchWrap">
+        <span class="searchIcon">⌕</span>
+        <input id="search" type="search" autocomplete="off" placeholder="搜记忆 / 人 / 话题" aria-label="搜索节点">
+        <div id="searchResults"></div>
+      </div>
+      <button id="btnReset" class="ghost">回到总览</button>
+    </div>
+  </header>
+  <div id="main">
+    <aside id="sidebar">
+      <section class="sideBlock">
+        <div class="sideHead">
+          <h2>心情曲线</h2>
+          <div class="seg" id="rangeSeg">
+            <button data-range="24" class="active">24h</button>
+            <button data-range="168">7d</button>
+          </div>
+        </div>
+        <canvas id="moodChart"></canvas>
+        <div class="moodLegend"><span>愉悦度 <b id="moodValence">0.00</b></span><span>唤醒度 <b id="moodArousal">0.00</b></span></div>
+        <div id="needs"></div>
+      </section>
+      <section class="sideBlock">
+        <div class="sideHead"><h2>内心活动</h2><span class="sub" id="thoughtCount"></span></div>
+        <div id="thoughts"></div>
+      </section>
+      <section class="sideBlock">
+        <div class="sideHead"><h2>最近触发</h2><span class="sub" id="eventCount"></span></div>
+        <div id="events"></div>
+      </section>
+    </aside>
+    <section id="stage">
+      <canvas id="graphCanvas"></canvas>
+      <div id="filters">
+        <button class="chip active" data-filter="all">全部</button>
+        <button class="chip" data-filter="person">重要的人</button>
+        <button class="chip" data-filter="behavior">重要行为</button>
+        <button class="chip" data-filter="topic">主题</button>
+        <button class="chip" data-filter="emotion">情绪</button>
+        <button class="chip" data-filter="memory">记忆</button>
+        <button class="chip" id="btnMore">更多记忆</button>
+      </div>
+      <div id="stageInfo"><b id="stageCount">—</b><br><span id="stageHintSmall">正在定位她的心</span></div>
+      <div id="tooltip"></div>
+      <div id="detailPanel">
+        <div class="dpHead">
+          <div><div class="dpType" id="dpType">节点</div><h2 id="dpTitle">—</h2></div>
+          <button class="dpClose" id="dpClose" aria-label="关闭">×</button>
+        </div>
+        <div class="dpTags" id="dpTags"></div>
+        <div class="dpText" id="dpText"></div>
+        <div class="dpSection"><h3>连接</h3><div id="dpLinks"></div></div>
+        <button class="dpAction" id="dpFocus">在图中定位</button>
+      </div>
+      <div id="stageHud"><b>中心是人格核心</b>，向外是最重要的人、行为与记忆。<br>线越亮，关系越重；点节点看详情，滚轮缩放，拖动平移。</div>
+      <div id="legend">
+        <span><i class="dot" style="background:#ffd37b"></i>核心</span>
+        <span><i class="dot" style="background:#ffd37b"></i>人</span>
+        <span><i class="dot" style="background:#73dcff"></i>行为</span>
+        <span><i class="dot" style="background:#78b9ef"></i>主题</span>
+        <span><i class="dot" style="background:#ff92ae"></i>情绪</span>
+        <span><i class="dot" style="background:#a9bee0"></i>记忆</span>
+      </div>
+      <div id="empty"><b>还没有关系数据</b><span>等她在 QQ / B站 里留下记忆，这里会慢慢长出来。</span></div>
+    </section>
   </div>
-  <div id="rightTools">
-    <span class="status" id="liveStatus">●</span>
-    <button id="btnOverview">回到总览</button>
-    <button id="btnRefresh">刷新</button>
-  </div>
 </div>
-
-<div id="left" class="panel">
-  <h2>心情曲线 · 近 24 小时</h2>
-  <canvas id="moodChart"></canvas>
-  <div id="moodNow"><span>愉悦度 <b id="moodValence">0.00</b></span><span>唤醒度 <b id="moodArousal">0.00</b></span></div>
-  <div class="needs" id="needs"></div>
-  <div class="thoughtsHead">内心活动 <span id="thoughtCount"></span></div>
-  <div class="thoughts" id="thoughts"></div>
-</div>
-
-<div id="brainHint">点脑区查看对应模块；节点颜色越亮 = 她觉得越重要。<br>页面每 3 秒自动更新，不需要手动刷新。</div>
-
-<div id="regionPanel" class="panel">
-  <div class="rh"><h2 id="regionName">脑区</h2><button id="btnCloseRegion">返回</button></div>
-  <div class="desc" id="regionDesc"></div>
-  <div id="regionStats"></div>
-  <div id="regionMetrics"></div>
-  <canvas id="miniGraph"></canvas>
-  <button class="back" id="btnBack">← 回到大脑总览</button>
-</div>
-
-<div id="timeline" class="panel">
-  <div class="head"><span>最近事件（触发 → 评估 → 情绪）</span><span id="eventCount"></span></div>
-  <div id="events"></div>
-</div>
-<div id="empty">还没有大脑数据。<br>等她在 QQ 里说几句话，再回来看。</div>
-
 <script>
 (function () {
-  const $ = (id) => document.getElementById(id);
-  const brainCanvas = $('brainCanvas');
-  const bctx = brainCanvas.getContext('2d');
-  const bgCanvas = $('bg');
-  const gctx = bgCanvas.getContext('2d');
-  const moodCanvas = $('moodChart');
-  const mctx = moodCanvas.getContext('2d');
-  const mini = $('miniGraph');
-  const minictx = mini.getContext('2d');
-
-  const BRAIN_TOKEN = new URLSearchParams(location.search).get('token') || '';
-  const API_BASE = location.pathname.startsWith('/brain') ? '/api/brain' : '/dsh-oasis/api/brain';
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var TOKEN = new URLSearchParams(location.search).get('token') || '';
+  var API_BASE = location.pathname.indexOf('/brain') === 0 ? '/api/brain' : '/dsh-oasis/api/brain';
   function withToken(url) {
-    if (!BRAIN_TOKEN) return url;
-    return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(BRAIN_TOKEN);
+    if (!TOKEN) return url;
+    return url + (url.indexOf('?') >= 0 ? '&' : '?') + 'token=' + encodeURIComponent(TOKEN);
   }
-  async function fetchJson(url) {
-    const res = await fetch(withToken(url), { headers: { accept: 'application/json' } });
-    if (!res.ok) throw new Error('HTTP ' + res.status + (res.status === 401 ? '（缺少/失效的本地令牌）' : ''));
-    return res.json();
+  function fetchJson(url) {
+    return fetch(withToken(url), { headers: { accept: 'application/json' }, cache: 'no-store' }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (data && data.ok === false) throw new Error(data.error || 'API error');
+      return data;
+    });
+  }
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, Number(v) || 0)); }
+  function fmtTime(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit' });
+  }
+  function fmtDateTime(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+  function daysAgo(iso) {
+    var t = Date.parse(iso);
+    if (!isFinite(t)) return 365;
+    return Math.max(0, (Date.now() - t) / 86400000);
+  }
+  function labelOf(node) {
+    if (!node) return '';
+    if (node.type === 'topic') {
+      var key = String(node.label || '').toLowerCase();
+      if (TOPIC_ZH[key]) return TOPIC_ZH[key];
+    }
+    if (node.type === 'person' && String(node.label || '').toLowerCase() === 'owner') return '主人';
+    return String(node.label || '');
+  }
+  function hash01(value) {
+    var h = 2166136261;
+    var s = String(value);
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return ((h >>> 0) % 100000) / 100000;
+  }
+  function color(hex, alpha) {
+    var h = String(hex).replace('#', '');
+    var n = parseInt(h.length === 3 ? h.split('').map(function (c) { return c + c; }).join('') : h, 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha + ')';
   }
 
-  const REGIONS = [
-    { id:'prefrontal', name:'前额叶', desc:'目标、计划、自控', color:'#ffd166', x:205, y:-25 },
-    { id:'hippocampus', name:'海马体', desc:'记忆编码与回放', color:'#63e2ff', x:-38, y:44 },
-    { id:'amygdala', name:'杏仁核', desc:'情绪与威胁', color:'#ff7b9c', x:54, y:22 },
-    { id:'insula', name:'岛叶', desc:'生理状态与需求', color:'#8affc1', x:108, y:-16 },
-    { id:'dmn', name:'默认模式网络', desc:'发呆、走神、自我叙事', color:'#b28cff', x:-70, y:-86 },
-    { id:'temporal', name:'颞叶', desc:'语义、知识、话题', color:'#7cc4ff', x:16, y:116 },
-    { id:'social', name:'社会认知', desc:'关系、心智理论', color:'#f5c56b', x:146, y:30 },
-    { id:'parietal', name:'顶叶', desc:'注意力与空间', color:'#9fb7d9', x:16, y:-168 },
-    { id:'occipital', name:'枕叶', desc:'视觉画面与 B 站', color:'#9ee37d', x:-208, y:-22 },
-    { id:'broca', name:'布罗卡区', desc:'表达与说话风格', color:'#ffb86b', x:178, y:112 },
-    { id:'cerebellum', name:'小脑', desc:'习惯与节奏', color:'#5fd6c0', x:-208, y:112 },
-    { id:'brainstem', name:'脑干', desc:'基础唤醒与精力', color:'#8fa3c7', x:-120, y:168 },
+  var TYPES = {
+    core: { label: '核心人格', color: '#ffd37b' },
+    person: { label: '重要的人', color: '#ffd37b' },
+    behavior: { label: '重要行为', color: '#73dcff' },
+    topic: { label: '主题', color: '#78b9ef' },
+    emotion: { label: '情绪', color: '#ff92ae' },
+    episode: { label: '记忆', color: '#a9bee0' }
+  };
+  var TOPIC_ZH = {
+    self: '自我', dynamic: '动态', emotion: '情绪', promise: '约定', conflict: '冲突', owner: '主人',
+    video: '视频', bili: 'B站', qq: 'QQ', future: '未来', memory: '记忆',
+    relationship: '关系', project: '项目', house: '房子', code: '代码', sleep: '睡觉',
+    dream: '梦', sea: '海', whale: '鲸', family: '家', mom: '妈妈', owner: '主人'
+  };
+  var BEHAVIORS = [
+    { id: 'behavior:chat', label: '聊天', color: '#73dcff', scope: 'qq', keywords: ['qq', '群', '私聊', '说话', '回复', '消息', '聊天'], weight: 6.2 },
+    { id: 'behavior:bili', label: '刷 B站', color: '#73dcff', scope: 'bili', keywords: ['b站', 'bilibili', '视频', '动态', '弹幕', '投稿', '评论'], weight: 5.8 },
+    { id: 'behavior:sleep', label: '睡觉', color: '#a7b8ff', keywords: ['睡', '困', '梦', '晚安', '休息', '躺'], weight: 5.0 },
+    { id: 'behavior:daze', label: '发呆', color: '#9bb8e8', keywords: ['发呆', '走神', '安静', '窗外', '看海', '海', '鲸', '想'], weight: 4.6 },
+    { id: 'behavior:code', label: '写代码', color: '#8fd6ff', keywords: ['代码', '插件', 'dsh', '调试', '项目', '房子', '渲染'], weight: 4.4 },
+    { id: 'behavior:care', label: '照顾你', color: '#ffd37b', keywords: ['吃饭', '感冒', '陪', '抱', '别熬', '休息', '照顾', '摸摸'], weight: 5.2 }
   ];
+  var PERSON_COLOR = '#ffd37b';
 
-  const state = { mood:'', graph:{nodes:[],edges:[]}, regions:[], events:[], moodPoints:[],
-    live:null, selected:null, hover:null, lastLiveAt:0, es:null, timer:null };
+  var S = {
+    rawNodes: [], rawEdges: [], rawStats: {}, graphUpdatedAt: '', graphKey: '',
+    nodes: new Map(), edges: [], adjacency: new Map(), core: null,
+    persons: [], behaviors: [], topics: [], emotions: [], episodes: [], visible: [],
+    selected: null, hover: null, filter: 'all', episodeLimit: 220, search: '',
+    view: { zoom: 0.72, panX: 0, panY: 0, auto: true },
+    dragging: false, dragStart: null, moved: false, pointer: { x: 0, y: 0 },
+    selectedId: null, events: [], thoughts: [], moodPoints: [], moodRange: 24,
+    live: {}, cognition: {}, lastSync: 0, lastLive: 0, busy: false,
+    layoutCache: new Map(), firstLoad: true, empty: true
+  };
 
-  function resize() {
-    const dpr = window.devicePixelRatio || 1;
-    for (const [canvas, ctx] of [[brainCanvas, bctx], [bgCanvas, gctx]]) {
-      canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr;
-      canvas.style.width = innerWidth + 'px'; canvas.style.height = innerHeight + 'px';
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  var canvas = $('graphCanvas');
+  var ctx = canvas.getContext('2d');
+  var stage = $('stage');
+  var tooltip = $('tooltip');
+  var DPR = 1;
+  var W = 1, H = 1;
+  var drawDirty = true;
+  var lastDrawAt = 0;
+
+  function resizeCanvas() {
+    var rect = stage.getBoundingClientRect();
+    DPR = window.devicePixelRatio || 1;
+    W = Math.max(1, rect.width);
+    H = Math.max(1, rect.height);
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    if (S.view.auto) fitView();
+    drawDirty = true;
+  }
+  window.addEventListener('resize', resizeCanvas);
+
+  function fitView() {
+    if (!S.visible.length) {
+      S.view.zoom = 0.72; S.view.panX = 0; S.view.panY = 0; return;
     }
-    const mr = moodCanvas.getBoundingClientRect();
-    moodCanvas.width = mr.width * dpr; moodCanvas.height = mr.height * dpr;
-    mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (state.selected) sizeMini();
-    drawBg(); drawBrain(); drawMood();
-    if (state.selected) drawMini();
-  }
-  window.addEventListener('resize', resize);
-
-  const stars = Array.from({ length: 90 }, () => ({ x:Math.random(), y:Math.random(), a:Math.random() * 0.35 + 0.08 }));
-  function drawBg() {
-    const w = innerWidth, h = innerHeight;
-    gctx.clearRect(0, 0, w, h);
-    const grd = gctx.createRadialGradient(w * 0.58, h * 0.5, 20, w * 0.58, h * 0.5, Math.max(w, h) * 0.75);
-    grd.addColorStop(0, 'rgba(14,32,64,.55)'); grd.addColorStop(.55, 'rgba(5,11,23,.2)'); grd.addColorStop(1, 'rgba(3,6,14,.95)');
-    gctx.fillStyle = grd; gctx.fillRect(0, 0, w, h);
-    for (const s of stars) {
-      gctx.fillStyle = 'rgba(130,190,255,' + s.a + ')';
-      gctx.fillRect(s.x * w, s.y * h, 1.1, 1.1);
-    }
-  }
-
-  function brainTransform() {
-    const w = innerWidth, h = innerHeight;
-    const cx = w * 0.58, cy = h * 0.5 + 18;
-    return { cx, cy, s: Math.min(w / 1100, h / 760) * 1.15 };
-  }
-
-  function brainPath(ctx) {
-    ctx.beginPath();
-    ctx.moveTo(-258, -28);
-    ctx.bezierCurveTo(-288, -128, -198, -232, -66, -238);
-    ctx.bezierCurveTo(72, -244, 204, -188, 244, -84);
-    ctx.bezierCurveTo(276, 2, 244, 92, 176, 136);
-    ctx.bezierCurveTo(130, 166, 82, 158, 48, 132);
-    ctx.bezierCurveTo(6, 166, -72, 174, -132, 148);
-    ctx.bezierCurveTo(-196, 120, -224, 72, -226, 20);
-    ctx.bezierCurveTo(-238, 4, -250, -12, -258, -28);
-    ctx.closePath();
-  }
-
-  function regionBlob(ctx, r, stats) {
-    const activity = stats ? stats.activity : 0.2;
-    const rad = 44 + activity * 34;
-    const g = ctx.createRadialGradient(r.x, r.y, 2, r.x, r.y, rad);
-    g.addColorStop(0, hexA(r.color, .55));
-    g.addColorStop(.45, hexA(r.color, .16));
-    g.addColorStop(1, hexA(r.color, 0));
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(r.x, r.y, rad, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = hexA(r.color, .5);
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(r.x, r.y, rad * .68, 0, Math.PI * 2); ctx.stroke();
+    var minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    S.visible.forEach(function (n) {
+      minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y); maxY = Math.max(maxY, n.y);
+    });
+    var cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    var rw = Math.max(300, maxX - minX + 100), rh = Math.max(300, maxY - minY + 100);
+    var z = Math.min((W - 74) / rw, (H - 74) / rh);
+    S.view.zoom = clamp(z, 0.28, 1.45);
+    S.view.panX = -cx * S.view.zoom;
+    S.view.panY = -cy * S.view.zoom;
   }
 
-  function drawBrain(t) {
-    const w = innerWidth, h = innerHeight;
-    bctx.clearRect(0, 0, w, h);
-    const { cx, cy, s } = brainTransform();
-    const pulse = 1 + Math.sin((t || 0) / 900) * 0.006;
-    bctx.save(); bctx.translate(cx, cy); bctx.scale(s * pulse, s * pulse);
+  function worldFromScreen(sx, sy) {
+    return {
+      x: (sx - W / 2 - S.view.panX) / S.view.zoom,
+      y: (sy - H / 2 - S.view.panY) / S.view.zoom
+    };
+  }
+  function screenFromWorld(x, y) {
+    return {
+      x: W / 2 + S.view.panX + x * S.view.zoom,
+      y: H / 2 + S.view.panY + y * S.view.zoom
+    };
+  }
 
-    bctx.save();
-    brainPath(bctx);
-    const fill = bctx.createLinearGradient(-260, -240, 260, 220);
-    fill.addColorStop(0, 'rgba(18,46,84,.55)');
-    fill.addColorStop(.55, 'rgba(9,24,46,.7)');
-    fill.addColorStop(1, 'rgba(6,14,28,.82)');
-    bctx.fillStyle = fill; bctx.fill();
-    bctx.strokeStyle = 'rgba(99,226,255,.5)'; bctx.lineWidth = 1.4;
-    bctx.shadowColor = 'rgba(99,226,255,.4)'; bctx.shadowBlur = 18; bctx.stroke();
-    bctx.shadowBlur = 0;
-    bctx.restore();
-
-    bctx.strokeStyle = 'rgba(120,180,255,.13)'; bctx.lineWidth = 1;
-    for (let i = -2; i <= 2; i++) {
-      bctx.beginPath();
-      bctx.moveTo(-230, i * 38 - 20);
-      bctx.bezierCurveTo(-120, i * 44 - 50, 60, i * 40 - 20, 225, i * 28 - 8);
-      bctx.stroke();
+  function addNode(node) {
+    S.nodes.set(node.id, node);
+    return node;
+  }
+  function addEdge(from, to, type, weight) {
+    if (!from || !to || from === to) return;
+    if (!S.nodes.has(from) || !S.nodes.has(to)) return;
+    var key = from < to ? from + '|' + to : to + '|' + from;
+    if (S._edgeKeys && S._edgeKeys.has(key)) return;
+    if (!S._edgeKeys) S._edgeKeys = new Set();
+    S._edgeKeys.add(key);
+    S.edges.push({ from: from, to: to, type: type || 'related', weight: Number(weight) || 1, key: key });
+  }
+  function degreeOf(id) {
+    var e = S.adjacency.get(id);
+    return e ? e.length : 0;
+  }
+  function importanceOf(node) {
+    if (node.type === 'core') return 100;
+    if (node.type === 'person') return 100;
+    if (node.type === 'behavior') return 88;
+    if (node.type === 'emotion') return 64;
+    if (node.type === 'topic') return node.importance || 52;
+    return clamp(node.importance || 20, 1, 100);
+  }
+  function nodeRadius(node) {
+    if (node.type === 'core') return 32;
+    if (node.type === 'person') return 15 + clamp(node.importance, 1, 100) * 0.055;
+    if (node.type === 'behavior') return 11 + clamp(node.importance, 1, 100) * 0.035;
+    if (node.type === 'topic') return 6 + clamp(node.importance, 1, 100) * 0.035;
+    if (node.type === 'emotion') return 7 + clamp(node.importance, 1, 100) * 0.025;
+    return 3.1 + clamp(node.importance, 1, 100) / 14;
+  }
+  function nodeColor(node) {
+    if (node.type === 'episode') {
+      var imp = clamp(node.importance, 1, 100);
+      if (imp >= 85) return '#e6c4ff';
+      if (imp >= 60) return '#b8d6f7';
+      if (imp >= 35) return '#9db9df';
+      return '#8199bd';
     }
-    bctx.beginPath(); bctx.moveTo(-10, -228); bctx.bezierCurveTo(26, -70, 26, 40, 40, 140); bctx.stroke();
+    return (TYPES[node.type] && TYPES[node.type].color) || '#a9bee0';
+  }
 
-    bctx.fillStyle = 'rgba(12,30,54,.8)';
-    bctx.strokeStyle = 'rgba(95,214,192,.4)';
-    bctx.beginPath(); bctx.ellipse(-188, 150, 62, 34, .2, 0, Math.PI * 2); bctx.fill(); bctx.stroke();
-    bctx.beginPath(); bctx.moveTo(-96, 168); bctx.quadraticCurveTo(-120, 228, -150, 244);
-    bctx.lineWidth = 16; bctx.strokeStyle = 'rgba(72,110,160,.55)'; bctx.stroke();
-    bctx.lineWidth = 1; bctx.strokeStyle = 'rgba(143,163,199,.45)'; bctx.stroke();
+  function behaviorMatch(behavior, node) {
+    var text = String(node.label || '') + ' ' + String(node.text || '') + ' ' + String(node.emotion || '');
+    text = text.toLowerCase();
+    var score = 0;
+    if (behavior.scope && node.scope === behavior.scope) score += 1.1;
+    if (behavior.scope && node.platform === behavior.scope) score += 0.45;
+    behavior.keywords.forEach(function (k) { if (text.indexOf(k) !== -1) score += 0.38; });
+    return score;
+  }
 
-    for (let i = 0; i < 55; i++) {
-      const a = i * 2.399; const rr = 40 + (i * 37) % 220;
-      const x = Math.cos(a) * rr * 1.12, y = Math.sin(a) * rr * .78;
-      bctx.fillStyle = 'rgba(130,200,255,' + (0.05 + (i % 5) * 0.02) + ')';
-      bctx.fillRect(x, y, 1.5, 1.5);
-    }
+  function buildModel() {
+    S._edgeKeys = new Set();
+    S.edges = [];
+    S.adjacency = new Map();
+    S.nodes.clear();
+    S._core = null;
+    S.core = addNode({ id: '__core__', type: 'core', label: '大肥鱼', subtitle: '人格核心', importance: 100 });
+    S.visible = [];
 
-    for (const r of REGIONS) {
-      const stats = state.regions.find((x) => x.id === r.id);
-      const selected = state.selected === r.id;
-      const hover = state.hover === r.id;
-      const dim = state.selected && !selected;
-      bctx.save();
-      if (dim) bctx.globalAlpha = 0.32;
-      regionBlob(bctx, r, stats);
-      bctx.shadowColor = r.color; bctx.shadowBlur = selected ? 22 : hover ? 14 : 0;
-      bctx.fillStyle = r.color;
-      bctx.beginPath(); bctx.arc(r.x, r.y, selected ? 7 : 4.5, 0, Math.PI * 2); bctx.fill();
-      bctx.shadowBlur = 0;
-      if (selected) {
-        bctx.strokeStyle = 'rgba(255,255,255,.65)'; bctx.lineWidth = 1.2;
-        bctx.beginPath(); bctx.arc(r.x, r.y, 18 + Math.sin((t || 0) / 500) * 3, 0, Math.PI * 2); bctx.stroke();
-      }
-      bctx.font = (selected ? '600 12px' : '11px') + ' "Segoe UI","Microsoft YaHei",sans-serif';
-      bctx.textAlign = 'center';
-      const labelY = r.y - (selected ? 24 : 16);
-      const tw = bctx.measureText(r.name).width;
-      bctx.fillStyle = 'rgba(4,10,20,.55)';
-      bctx.fillRect(r.x - tw / 2 - 4, labelY - 10, tw + 8, 14);
-      bctx.fillStyle = dim ? 'rgba(200,218,245,.4)' : 'rgba(226,238,255,.96)';
-      bctx.fillText(r.name, r.x, labelY);
-      if (stats) {
-        bctx.fillStyle = dim ? 'rgba(150,170,200,.35)' : 'rgba(150,175,210,.7)';
-        bctx.font = '10px "Segoe UI","Microsoft YaHei",sans-serif';
-        bctx.fillText(stats.nodeCount + ' 节点' + (stats.activeCount ? ' · ' + stats.activeCount + ' 活跃' : ''), r.x, r.y + 24);
-      }
-      bctx.restore();
-    }
+    var raw = S.rawNodes || [];
+    var rawById = new Map();
+    raw.forEach(function (n) { rawById.set(n.id, n); });
+    var degree = new Map();
+    (S.rawEdges || []).forEach(function (e) {
+      degree.set(e.from, (degree.get(e.from) || 0) + 1);
+      degree.set(e.to, (degree.get(e.to) || 0) + 1);
+    });
 
-    if (state.selected) {
-      const region = REGIONS.find((x) => x.id === state.selected);
-      const nodes = state.graph.nodes.filter((n) => n.region === state.selected).slice(0, 80);
-      nodes.forEach((n, i) => {
-        const a = i * 2.399 + (t || 0) / 6000;
-        const rr = 22 + Math.sqrt(i) * 8;
-        const x = region.x + Math.cos(a) * rr * 1.2;
-        const y = region.y + Math.sin(a) * rr * .8;
-        bctx.beginPath(); bctx.arc(x, y, 2.1 + Math.min(4, (Number(n.importance) || 20) / 40), 0, Math.PI * 2);
-        bctx.fillStyle = importanceColor(n.importance); bctx.globalAlpha = .9; bctx.fill(); bctx.globalAlpha = 1;
+    var showPersons = S.filter === 'all' || S.filter === 'person' || S.filter === 'memory';
+    var showBehaviors = S.filter === 'all' || S.filter === 'behavior' || S.filter === 'memory';
+    var showTopics = S.filter === 'all' || S.filter === 'topic' || S.filter === 'memory';
+    var showEmotions = S.filter === 'all' || S.filter === 'emotion' || S.filter === 'memory';
+    var showEpisodes = S.filter === 'all' || S.filter === 'memory';
+
+    if (showPersons) {
+      raw.filter(function (n) { return n.type === 'person'; }).forEach(function (n) {
+        addNode({
+          id: n.id, type: 'person', label: n.label || '重要的人', text: n.text || '',
+          importance: 100, raw: n, degree: degree.get(n.id) || 0
+        });
       });
-      if (nodes.length) {
-        bctx.fillStyle = 'rgba(226,238,255,.8)';
-        bctx.font = '10px "Segoe UI","Microsoft YaHei",sans-serif';
-        bctx.textAlign = 'left';
-        bctx.fillText('展开 ' + nodes.length + ' 个相关节点', region.x + 50, region.y + 54);
-      }
     }
-    bctx.restore();
+
+    if (showBehaviors) {
+      BEHAVIORS.forEach(function (b) {
+        addNode({
+          id: b.id, type: 'behavior', label: b.label, text: '她反复出现的行为倾向。',
+          importance: b.weight * 10, behavior: b, raw: null
+        });
+      });
+    }
+
+    var topicNodes = raw.filter(function (n) { return n.type === 'topic'; });
+    var emotionNodes = raw.filter(function (n) { return n.type === 'emotion'; });
+    if (showTopics) {
+      topicNodes.forEach(function (n) {
+        var imp = clamp(42 + (degree.get(n.id) || 0) * 1.1, 30, 92);
+        addNode({ id: n.id, type: 'topic', label: n.label || '主题', text: n.text || '', importance: imp, raw: n, degree: degree.get(n.id) || 0 });
+      });
+    }
+    if (showEmotions) {
+      emotionNodes.forEach(function (n) {
+        addNode({ id: n.id, type: 'emotion', label: n.label || '情绪', text: n.text || '', importance: 62, raw: n, degree: degree.get(n.id) || 0 });
+      });
+    }
+
+    var episodeNodes = raw.filter(function (n) { return n.type === 'episode'; }).map(function (n) {
+      var imp = clamp(n.importance || 10, 1, 100);
+      var rec = Math.exp(-daysAgo(n.lastActivatedAt || n.createdAt) / 32);
+      var dg = degree.get(n.id) || 0;
+      var act = clamp(n.activation || 0, 0, 1);
+      return { raw: n, score: imp + rec * 24 + Math.min(12, dg * 1.3) + act * 20 };
+    }).sort(function (a, b) { return b.score - a.score; });
+
+    var limit = S.filter === 'memory' ? Math.max(260, S.episodeLimit) : S.episodeLimit;
+    if (showEpisodes) {
+      episodeNodes.slice(0, limit).forEach(function (item) {
+        var n = item.raw;
+        var imp = clamp(n.importance || 10, 1, 100);
+        addNode({
+          id: n.id, type: 'episode', label: n.label || n.text || '记忆', text: n.text || n.label || '',
+          importance: imp, raw: n, degree: degree.get(n.id) || 0, score: item.score
+        });
+      });
+    }
+
+    // Temporary visible set for the presentation-only center/behavior links.
+    S.visible = Array.from(S.nodes.values());
+    S.persons = S.visible.filter(function (n) { return n.type === 'person'; });
+    S.behaviors = S.visible.filter(function (n) { return n.type === 'behavior'; });
+    S.topics = S.visible.filter(function (n) { return n.type === 'topic'; });
+    S.emotions = S.visible.filter(function (n) { return n.type === 'emotion'; });
+    S.episodes = S.visible.filter(function (n) { return n.type === 'episode'; });
+
+    // Raw edges only when both ends are in view.
+    (S.rawEdges || []).forEach(function (e) {
+      if (!S.nodes.has(e.from) || !S.nodes.has(e.to)) return;
+      addEdge(e.from, e.to, e.type || 'related', Number(e.weight) || 1);
+    });
+
+    // The center is a presentation-only node: link it to important people,
+    // behaviors, and a few high-signal themes.
+    S.persons.forEach(function (p) { addEdge('__core__', p.id, 'core', 12); });
+    S.behaviors.forEach(function (b) { addEdge('__core__', b.id, 'core', b.behavior ? b.behavior.weight : 6); });
+    var topThemes = S.visible.filter(function (n) { return n.type === 'topic' || n.type === 'emotion'; })
+      .sort(function (a, b) { return importanceOf(b) - importanceOf(a); }).slice(0, 7);
+    topThemes.forEach(function (n) { addEdge('__core__', n.id, 'theme', 2.1); });
+
+    // Behavior links: the strongest matching memories are allowed to pull a
+    // behavior outward, without inventing a raw brain edge.
+    S.behaviors.forEach(function (b) {
+      var candidates = S.visible.filter(function (n) { return n.type === 'episode'; }).map(function (n) {
+        return { n: n, score: behaviorMatch(b.behavior, n.raw || {}) };
+      }).filter(function (x) { return x.score > 0.45; }).sort(function (a, b2) { return b2.score - a.score; }).slice(0, 7);
+      candidates.forEach(function (x) { addEdge(b.id, x.n.id, 'behavior', 0.8 + x.score); });
+    });
+
+    S.visible = Array.from(S.nodes.values());
+    S.persons = S.visible.filter(function (n) { return n.type === 'person'; });
+    S.behaviors = S.visible.filter(function (n) { return n.type === 'behavior'; });
+    S.topics = S.visible.filter(function (n) { return n.type === 'topic'; });
+    S.emotions = S.visible.filter(function (n) { return n.type === 'emotion'; });
+    S.episodes = S.visible.filter(function (n) { return n.type === 'episode'; });
+    S.persons.sort(function (a, b) { return (b.degree || 0) - (a.degree || 0) || hash01(a.id) - hash01(b.id); });
+
+    // adjacency
+    S.adjacency = new Map();
+    S.visible.forEach(function (n) { S.adjacency.set(n.id, []); });
+    S.edges.forEach(function (e) {
+      if (!S.adjacency.has(e.from) || !S.adjacency.has(e.to)) return;
+      S.adjacency.get(e.from).push(e);
+      S.adjacency.get(e.to).push(e);
+    });
+    S.visible.forEach(function (n) { n.degree = degreeOf(n.id); n.importance = importanceOf(n); n.radius = nodeRadius(n); });
+
+    layoutNodes();
+    updateMeta();
+    updateFilters();
+    if (S.selectedId && S.nodes.has(S.selectedId)) openDetail(S.selectedId, false);
+    else closeDetail();
+    drawDirty = true;
   }
 
-  function importanceColor(v) {
-    const x = Math.max(0, Math.min(100, Number(v) || 0)) / 100;
-    if (x < .35) return 'rgba(130,160,200,.7)';
-    if (x < .6) return '#63e2ff';
-    if (x < .8) return '#ffd166';
-    return '#ff7b9c';
+  function seedNode(node, x, y) {
+    var cached = S.layoutCache.get(node.id);
+    if (cached) {
+      node.x = cached.x; node.y = cached.y;
+      node.pinned = node.type === 'core';
+      return;
+    }
+    node.x = x; node.y = y; node.seedX = x; node.seedY = y;
+    node.pinned = node.type === 'core';
   }
-  function hexA(hex, a) {
-    const h = hex.replace('#', '');
-    const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
-    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+
+  function layoutNodes() {
+    var core = S.nodes.get('__core__');
+    if (core) { core.x = 0; core.y = 0; core.seedX = 0; core.seedY = 0; core.pinned = true; }
+
+    var pn = Math.max(1, S.persons.length);
+    var personAngles = [-2.35, -0.72, 1.05, 2.55];
+    S.persons.forEach(function (n, i) {
+      var angle = personAngles[i % personAngles.length];
+      if (pn > personAngles.length) angle = -Math.PI / 2 + (i / pn) * Math.PI * 2;
+      n.angle = angle;
+      seedNode(n, Math.cos(angle) * 170, Math.sin(angle) * 170);
+    });
+
+    var bn = Math.max(1, S.behaviors.length);
+    S.behaviors.forEach(function (n, i) {
+      var angle = -Math.PI / 2 + Math.PI / bn + (i / bn) * Math.PI * 2;
+      n.angle = angle;
+      seedNode(n, Math.cos(angle) * 245, Math.sin(angle) * 245);
+    });
+
+    var themes = S.topics.concat(S.emotions).sort(function (a, b) {
+      return (importanceOf(b) * 2 + (b.degree || 0)) - (importanceOf(a) * 2 + (a.degree || 0));
+    });
+    themes.forEach(function (n, i) {
+      var angle = -Math.PI / 2 + (i / Math.max(1, themes.length)) * Math.PI * 2 + (hash01(n.id) - 0.5) * 0.17;
+      var radius = n.type === 'emotion' ? 315 : 296;
+      n.angle = angle;
+      seedNode(n, Math.cos(angle) * radius, Math.sin(angle) * radius);
+    });
+
+    // Episodes are distributed around the full circle first, then gently
+    // pulled toward their best topic/person anchor. Pure anchor clustering makes
+    // one memory lobe swallow the whole map when most episodes mention 主人.
+    var totalEpisodes = Math.max(1, S.episodes.length);
+    S.episodes.forEach(function (n, index) {
+      var links = S.adjacency.get(n.id) || [];
+      var topicAnchor = null, personAnchor = null;
+      for (var i = 0; i < links.length; i++) {
+        var e = links[i];
+        var otherId = e.from === n.id ? e.to : e.from;
+        var other = S.nodes.get(otherId);
+        if (!other) continue;
+        if (other.type === 'topic' && (!topicAnchor || (other.degree || 0) > (topicAnchor.degree || 0))) topicAnchor = other;
+        if (other.type === 'person') personAnchor = other;
+      }
+      var anchor = topicAnchor || personAnchor;
+      var ideal = anchor && typeof anchor.angle === 'number' ? anchor.angle : -Math.PI / 2;
+      var even = -Math.PI / 2 + (index / totalEpisodes) * Math.PI * 2;
+      var delta = Math.atan2(Math.sin(ideal - even), Math.cos(ideal - even));
+      var angle = even + delta * 0.22 + (hash01(n.id) - 0.5) * 0.16;
+      var imp = clamp(n.importance, 1, 100);
+      var radius = 382 + (1 - imp / 100) * 142 + (hash01(n.id + '#r') - 0.5) * 30;
+      n.angle = angle;
+      seedNode(n, Math.cos(angle) * radius, Math.sin(angle) * radius);
+    });
+
+    // Gentle collision relaxation: keeps clusters readable without a long
+    // force simulation on every refresh.
+    var list = S.visible;
+    for (var iter = 0; iter < 9; iter++) {
+      for (var i = 0; i < list.length; i++) {
+        var a = list[i];
+        for (var j = i + 1; j < list.length; j++) {
+          var b = list[j];
+          var dx = b.x - a.x, dy = b.y - a.y;
+          var d2 = dx * dx + dy * dy;
+          var minD = (a.radius || 5) + (b.radius || 5) + 8;
+          if (d2 < minD * minD) {
+            var d = Math.sqrt(d2) || 0.001;
+            var push = (minD - d) * 0.42;
+            var ux = dx / d, uy = dy / d;
+            if (!a.pinned) { a.x -= ux * push; a.y -= uy * push; }
+            if (!b.pinned) { b.x += ux * push; b.y += uy * push; }
+          }
+        }
+      }
+    }
+    S.visible.forEach(function (n) { S.layoutCache.set(n.id, { x: n.x, y: n.y }); });
+    if (S.view.auto) fitView();
+  }
+
+  function edgeStrength(e) {
+    var a = S.nodes.get(e.from), b = S.nodes.get(e.to);
+    if (!a || !b) return 0;
+    var imp = (importanceOf(a) + importanceOf(b)) / 200;
+    var rec = Math.max(Math.exp(-daysAgo(a.raw && (a.raw.lastActivatedAt || a.raw.createdAt)) / 45),
+      Math.exp(-daysAgo(b.raw && (b.raw.lastActivatedAt || b.raw.createdAt)) / 45));
+    var base = e.type === 'core' ? 0.85 : e.type === 'behavior' ? 0.55 : e.type === 'mentions' ? 0.55 : 0.35;
+    return clamp(base + imp * 0.55 + rec * 0.28 + Math.min(0.35, (e.weight || 1) / 10), 0.10, 1.15);
+  }
+
+  function drawGraph() {
+    if (!ctx) return;
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.translate(W / 2 + S.view.panX, H / 2 + S.view.panY);
+    ctx.scale(S.view.zoom, S.view.zoom);
+
+    // soft orbit rings: a quiet guide, not a cyber brain casing
+    ctx.lineWidth = 1 / S.view.zoom;
+    [170, 245, 315, 430].forEach(function (r, i) {
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(108, 157, 210,' + (i === 0 ? '.10' : '.055') + ')';
+      ctx.setLineDash(i === 0 ? [] : [3 / S.view.zoom, 5 / S.view.zoom]);
+      ctx.arc(0, 0, r, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    var selected = S.selectedId ? S.nodes.get(S.selectedId) : null;
+    var hover = S.hover ? S.nodes.get(S.hover) : null;
+    var focus = selected || hover;
+    var focusIds = new Set();
+    var focusEdges = new Set();
+    if (focus) {
+      focusIds.add(focus.id);
+      (S.adjacency.get(focus.id) || []).forEach(function (e) {
+        focusEdges.add(e.key);
+        focusIds.add(e.from);
+        focusIds.add(e.to);
+      });
+    }
+
+    var visibleEdges = S.edges;
+    var strongEdges = [];
+    visibleEdges.forEach(function (e) {
+      var s = edgeStrength(e);
+      e._strength = s;
+      if (s > 0.74) strongEdges.push(e);
+    });
+    strongEdges.slice(0, 32).forEach(function (e) {
+      var a = S.nodes.get(e.from), b = S.nodes.get(e.to);
+      if (!a || !b) return;
+      var isFocus = !focus || focusEdges.has(e.key);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = isFocus ? 'rgba(126, 206, 241,' + (0.10 + e._strength * 0.08) + ')' : 'rgba(102, 143, 193,.025)';
+      ctx.lineWidth = (2.2 + e._strength * 3.4) / S.view.zoom;
+      ctx.stroke();
+    });
+
+    visibleEdges.forEach(function (e) {
+      var a = S.nodes.get(e.from), b = S.nodes.get(e.to);
+      if (!a || !b) return;
+      var s = e._strength || edgeStrength(e);
+      var active = !focus || focusEdges.has(e.key);
+      var alpha = active ? Math.min(0.44, 0.035 + s * 0.30) : 0.012;
+      var lineColor = e.type === 'core' ? '235, 201, 128' : e.type === 'behavior' ? '117, 199, 224' : '125, 164, 211';
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = 'rgba(' + lineColor + ',' + alpha + ')';
+      ctx.lineWidth = Math.max(0.65, (0.35 + s * 1.15) / S.view.zoom);
+      ctx.stroke();
+    });
+
+    var showLabels = S.view.zoom > 0.50;
+    S.visible.forEach(function (n) {
+      var isFocus = focus ? focusIds.has(n.id) : false;
+      var dim = focus && !isFocus;
+      var a = dim ? 0.16 : 1;
+      var r = n.radius || 4;
+      var col = nodeColor(n);
+      ctx.globalAlpha = a;
+
+      if (n.type === 'core') {
+        var g = ctx.createRadialGradient(0, 0, 1, 0, 0, 58);
+        g.addColorStop(0, 'rgba(255, 230, 172,.38)');
+        g.addColorStop(.55, 'rgba(255, 196, 114,.10)');
+        g.addColorStop(1, 'rgba(255, 185, 100,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(0, 0, 58, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowColor = '#ffd37b'; ctx.shadowBlur = 24;
+        ctx.fillStyle = '#ffe9b0';
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(255, 237, 193,.9)'; ctx.lineWidth = 1.2 / S.view.zoom;
+        ctx.beginPath(); ctx.arc(0, 0, r + 7, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = 'rgba(255, 236, 197,.96)';
+        ctx.font = '600 ' + (12 / S.view.zoom) + 'px "Microsoft YaHei", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(labelOf(n), 0, r + 25 / S.view.zoom);
+        ctx.fillStyle = 'rgba(185, 201, 220,.72)';
+        ctx.font = (9 / S.view.zoom) + 'px "Microsoft YaHei", sans-serif';
+        ctx.fillText('人格核心', 0, r + 39 / S.view.zoom);
+      } else {
+        if (n.type === 'person' || n.type === 'behavior' || (focus && focusIds.has(n.id))) {
+          var glow = ctx.createRadialGradient(n.x, n.y, r, n.x, n.y, r * 2.8);
+          glow.addColorStop(0, color(col, .23));
+          glow.addColorStop(1, color(col, 0));
+          ctx.fillStyle = glow;
+          ctx.beginPath(); ctx.arc(n.x, n.y, r * 2.8, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = n.type === 'episode' ? color(col, 0.58 + clamp(n.importance, 0, 100) / 300) : color(col, .88);
+        ctx.fill();
+        if (n.type === 'person' || n.type === 'behavior') {
+          ctx.strokeStyle = color(col, .8); ctx.lineWidth = 1 / S.view.zoom;
+          ctx.beginPath(); ctx.arc(n.x, n.y, r + 2, 0, Math.PI * 2); ctx.stroke();
+        }
+        var labelIt = n.type === 'person' || n.type === 'behavior' ||
+          (n.type === 'topic' && n.degree >= 16 && S.view.zoom > 0.52) ||
+          (n.type === 'emotion' && n.degree >= 7) ||
+          n === focus || n === hover || (n.type === 'episode' && n.importance >= 92 && S.view.zoom > 0.88);
+        if (showLabels && labelIt) {
+          var fontSize = (n.type === 'person' ? 11 : n.type === 'behavior' ? 10.5 : 9.5) / S.view.zoom;
+          ctx.font = (n.type === 'person' ? '600 ' : '') + fontSize + 'px "Microsoft YaHei", sans-serif';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          var label = labelOf(n);
+          if (label.length > 18) label = label.slice(0, 18) + '…';
+          ctx.fillStyle = dim ? 'rgba(193, 211, 232,.32)' : (n.type === 'episode' ? 'rgba(206, 225, 245,.76)' : 'rgba(226, 240, 255,.92)');
+          ctx.fillText(label, n.x + r + 4 / S.view.zoom, n.y);
+        }
+      }
+      ctx.globalAlpha = 1;
+    });
+    ctx.restore();
+  }
+
+  function scheduleDraw() { drawDirty = true; }
+  function animationLoop(t) {
+    if (drawDirty || t - lastDrawAt > 420) {
+      drawDirty = false;
+      lastDrawAt = t;
+      drawGraph();
+    }
+    requestAnimationFrame(animationLoop);
+  }
+
+  function hitTest(sx, sy) {
+    var p = worldFromScreen(sx, sy);
+    var best = null, bestD = Infinity;
+    S.visible.forEach(function (n) {
+      var d = Math.hypot(p.x - n.x, p.y - n.y);
+      var hitR = Math.max((n.radius || 4) + 9 / S.view.zoom, 10 / S.view.zoom);
+      if (d < hitR && d < bestD) { bestD = d; best = n; }
+    });
+    return best;
+  }
+  function pointerPos(ev) {
+    var rect = canvas.getBoundingClientRect();
+    return { x: ev.clientX - rect.left, y: ev.clientY - rect.top };
+  }
+  function showTooltip(ev, node) {
+    if (!node) { tooltip.style.display = 'none'; return; }
+    var p = pointerPos(ev);
+    var left = Math.min(W - 260, p.x + 16);
+    var top = Math.min(H - 90, p.y + 14);
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+    tooltip.innerHTML = '<div class="ttTitle">' + escapeHtml(labelOf(node)) + '</div><div class="ttMeta">' +
+      escapeHtml(TYPES[node.type] ? TYPES[node.type].label : node.type) + ' · 重要度 ' + Math.round(importanceOf(node)) + ' · ' + (node.degree || 0) + ' 条连接</div>';
+    tooltip.style.display = 'block';
+  }
+  canvas.addEventListener('pointermove', function (ev) {
+    if (S.dragging && S.dragStart) {
+      var p = pointerPos(ev);
+      var dx = p.x - S.dragStart.x, dy = p.y - S.dragStart.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) S.moved = true;
+      S.view.panX = S.dragStart.panX + dx;
+      S.view.panY = S.dragStart.panY + dy;
+      S.view.auto = false;
+      canvas.classList.add('dragging');
+      scheduleDraw();
+      return;
+    }
+    var node = hitTest(pointerPos(ev).x, pointerPos(ev).y);
+    if ((node && node.id) !== S.hover) {
+      S.hover = node ? node.id : null;
+      tooltip.style.display = node ? 'block' : 'none';
+      scheduleDraw();
+    }
+    if (node) showTooltip(ev, node);
+    else tooltip.style.display = 'none';
+    canvas.style.cursor = node ? 'pointer' : 'grab';
+  });
+  canvas.addEventListener('pointerdown', function (ev) {
+    var p = pointerPos(ev);
+    S.dragging = true;
+    S.moved = false;
+    S.dragStart = { x: p.x, y: p.y, panX: S.view.panX, panY: S.view.panY };
+    canvas.setPointerCapture && canvas.setPointerCapture(ev.pointerId);
+  });
+  canvas.addEventListener('pointerup', function (ev) {
+    var wasDragging = S.dragging;
+    S.dragging = false;
+    S.dragStart = null;
+    canvas.classList.remove('dragging');
+    if (!wasDragging || S.moved) return;
+    var node = hitTest(pointerPos(ev).x, pointerPos(ev).y);
+    if (node) openDetail(node.id, true);
+    else closeDetail();
+  });
+  canvas.addEventListener('pointerleave', function () {
+    S.hover = null;
+    tooltip.style.display = 'none';
+    scheduleDraw();
+  });
+  canvas.addEventListener('wheel', function (ev) {
+    ev.preventDefault();
+    var rect = canvas.getBoundingClientRect();
+    var sx = ev.clientX - rect.left, sy = ev.clientY - rect.top;
+    var before = worldFromScreen(sx, sy);
+    var factor = ev.deltaY > 0 ? 0.90 : 1.10;
+    S.view.zoom = clamp(S.view.zoom * factor, 0.24, 3.4);
+    S.view.panX = sx - W / 2 - before.x * S.view.zoom;
+    S.view.panY = sy - H / 2 - before.y * S.view.zoom;
+    S.view.auto = false;
+    scheduleDraw();
+    tooltip.style.display = 'none';
+  }, { passive: false });
+  canvas.addEventListener('dblclick', function (ev) {
+    var node = hitTest(pointerPos(ev).x, pointerPos(ev).y);
+    if (node) focusNode(node.id);
+  });
+
+  function focusNode(id) {
+    var n = S.nodes.get(id);
+    if (!n) return;
+    S.view.zoom = Math.max(S.view.zoom, 0.86);
+    S.view.panX = -n.x * S.view.zoom;
+    S.view.panY = -n.y * S.view.zoom;
+    S.view.auto = false;
+    scheduleDraw();
+    openDetail(id, true);
+  }
+  function resetView() {
+    S.selectedId = null;
+    S.hover = null;
+    closeDetail();
+    S.view.auto = true;
+    fitView();
+    scheduleDraw();
+  }
+
+  function renderDetailTags(node) {
+    var tags = [];
+    if (node.type === 'episode') {
+      if (node.raw && node.raw.scope) tags.push(node.raw.scope === 'bili' ? 'B站' : node.raw.scope === 'qq' ? 'QQ' : node.raw.scope);
+      if (node.raw && node.raw.clarity) tags.push(node.raw.clarity === 'vivid' ? '清晰' : node.raw.clarity === 'clear' ? '清楚' : '模糊');
+      if (node.raw && node.raw.emotion) tags.push(node.raw.emotion);
+      if (node.raw && node.raw.createdAt) tags.push('创建 ' + fmtDateTime(node.raw.createdAt));
+    } else if (node.type === 'behavior') tags.push('行为');
+    else if (node.type === 'core') tags.push('中心');
+    tags.push('重要度 ' + Math.round(importanceOf(node)));
+    tags.push((node.degree || 0) + ' 条连接');
+    return tags.map(function (t) { return '<span class="dpTag">' + escapeHtml(t) + '</span>'; }).join('');
+  }
+  function openDetail(id, doDraw) {
+    var node = S.nodes.get(id);
+    if (!node) return;
+    S.selectedId = id;
+    $('detailPanel').classList.add('open');
+    $('dpType').textContent = (TYPES[node.type] ? TYPES[node.type].label : node.type) + (node.type === 'core' ? ' / 展示层' : '');
+    $('dpTitle').textContent = labelOf(node) || '—';
+    $('dpTags').innerHTML = renderDetailTags(node);
+    var mainText = node.text || node.subtitle || '';
+    if (node.type === 'behavior' && node.behavior) {
+      mainText = '她反复出现的行为倾向：' + node.behavior.label + '。这里只作为关系层的展示节点，不写入记忆数据。';
+    } else if (node.type === 'core') {
+      mainText = '所有重要的人、行为和记忆都从这里向外展开。这个中心节点只存在于展示层，不改变大脑数据。';
+    } else if (node.type === 'person') {
+      mainText = '她关系网络里最重要的人之一。这里的连线不是概率，是她已经留下的真实记忆与关联。';
+    } else if (node.type === 'topic' || node.type === 'emotion') {
+      mainText = '这个主题串联着她与重要的人、行为和记忆。点开右侧连接，可以沿着它继续回到具体记忆。';
+    }
+    $('dpText').textContent = mainText || '暂无正文。';
+    var links = (S.adjacency.get(id) || []).map(function (e) {
+      var other = S.nodes.get(e.from === id ? e.to : e.from);
+      return other ? { node: other, edge: e } : null;
+    }).filter(Boolean).sort(function (a, b) { return edgeStrength(b.edge) - edgeStrength(a.edge); }).slice(0, 16);
+    $('dpLinks').innerHTML = links.length ? links.map(function (x) {
+      return '<div class="linkRow" data-open="' + escapeHtml(x.node.id) + '"><span>' + escapeHtml(String(labelOf(x.node) || '').slice(0, 32)) +
+        '<span class="rtype"> · ' + escapeHtml(TYPES[x.node.type] ? TYPES[x.node.type].label : x.node.type) + '</span></span><span class="lbar">' + Math.round(edgeStrength(x.edge) * 100) + '</span></div>';
+    }).join('') : '<div class="emptyLine">暂时没有连接</div>';
+    $('dpFocus').dataset.node = id;
+    if (doDraw) scheduleDraw();
+  }
+  function closeDetail() {
+    S.selectedId = null;
+    $('detailPanel').classList.remove('open');
+    scheduleDraw();
+  }
+  $('dpClose').onclick = closeDetail;
+  $('dpFocus').onclick = function () { var id = this.dataset.node; if (id) focusNode(id); };
+  $('dpLinks').addEventListener('click', function (ev) {
+    var row = ev.target.closest('[data-open]');
+    if (!row) return;
+    focusNode(row.getAttribute('data-open'));
+  });
+
+  function updateMeta() {
+    $('meta').textContent = '节点 ' + S.visible.length + ' / 连线 ' + S.edges.length +
+      (S.graphUpdatedAt ? ' · 图同步 ' + fmtTime(S.graphUpdatedAt) : '');
+    $('stageCount').textContent = S.visible.length + ' 节点 · ' + S.edges.length + ' 连线';
+    $('stageHintSmall').textContent = S.empty ? '等待她的第一条记忆' : '点节点看关系';
+  }
+  function updateFilters() {
+    document.querySelectorAll('#filters .chip[data-filter]').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-filter') === S.filter);
+    });
+    $('btnMore').textContent = '记忆 ' + S.episodeLimit + ' / 展开更多';
+  }
+  $('filters').addEventListener('click', function (ev) {
+    var btn = ev.target.closest('[data-filter]');
+    if (!btn) {
+      if (ev.target.id === 'btnMore') {
+        S.episodeLimit = Math.min(905, S.episodeLimit + 180);
+        buildModel(); fitView(); scheduleDraw();
+      }
+      return;
+    }
+    S.filter = btn.getAttribute('data-filter');
+    S.view.auto = true;
+    buildModel(); fitView(); scheduleDraw();
+  });
+
+  function updateSync() {
+    var age = S.lastSync ? (Date.now() - S.lastSync) / 1000 : null;
+    var dot = $('syncDot'), text = $('syncText');
+    if (age == null) { dot.style.background = '#ffd37b'; text.textContent = '连接中'; return; }
+    if (age < 8) { dot.style.background = '#8ef0c2'; text.textContent = '实时 · ' + age.toFixed(1) + 's'; }
+    else { dot.style.background = '#ffd37b'; text.textContent = '同步延迟 · ' + Math.round(age) + 's'; }
+  }
+
+  function renderNeeds() {
+    var needs = (S.live && S.live.needs) || {};
+    var labels = [['social', '陪伴'], ['curiosity', '好奇'], ['rest', '休息'], ['security', '安全'], ['esteem', '被重视']];
+    $('needs').innerHTML = labels.map(function (pair) {
+      var v = clamp(needs[pair[0]] || 0, 0, 100);
+      return '<div class="need"><span>' + pair[1] + '</span><span class="bar"><i style="width:' + v.toFixed(1) + '%"></i></span><span class="val">' + Math.round(v) + '</span></div>';
+    }).join('');
   }
 
   function drawMood() {
-    const w = moodCanvas.clientWidth || 280, h = moodCanvas.clientHeight || 148;
-    mctx.clearRect(0, 0, w, h);
-    mctx.strokeStyle = 'rgba(120,170,255,.12)'; mctx.lineWidth = 1;
-    for (let i = 0; i <= 3; i++) { const y = 12 + (h - 30) * i / 3; mctx.beginPath(); mctx.moveTo(0, y); mctx.lineTo(w, y); mctx.stroke(); }
-    const points = state.moodPoints.length ? state.moodPoints : [{ t:Date.now(), valence:Number(state.live?.mood?.valence)||0, arousal:Number(state.live?.mood?.arousal)||0 }];
-    const t0 = points[0].t, t1 = points[points.length - 1].t || t0 + 1;
-    const px = (t) => 4 + (w - 8) * (t1 > t0 ? (t - t0) / (t1 - t0) : 0.5);
-    const py = (v) => 12 + (h - 30) * (1 - (Math.max(-1, Math.min(1, Number(v) || 0)) + 1) / 2);
-    const drawLine = (key, color, dashed) => {
-      mctx.beginPath();
-      points.forEach((p, i) => { const x = px(p.t), y = py(p[key]); if (i === 0) mctx.moveTo(x, y); else mctx.lineTo(x, y); });
-      mctx.strokeStyle = color; mctx.lineWidth = 1.8; mctx.setLineDash(dashed ? [4, 4] : []); mctx.stroke(); mctx.setLineDash([]);
-      const last = points[points.length - 1];
-      mctx.fillStyle = color; mctx.beginPath(); mctx.arc(px(last.t), py(last[key]), 3, 0, Math.PI * 2); mctx.fill();
-    };
-    mctx.beginPath();
-    points.forEach((p, i) => { const x = px(p.t), y = py(p.valence); if (i === 0) mctx.moveTo(x, y); else mctx.lineTo(x, y); });
-    mctx.lineTo(px(points[points.length - 1].t), h - 14); mctx.lineTo(px(points[0].t), h - 14); mctx.closePath();
-    const grad = mctx.createLinearGradient(0, 0, 0, h);
-    grad.addColorStop(0, 'rgba(99,226,255,.22)'); grad.addColorStop(1, 'rgba(99,226,255,0)');
-    mctx.fillStyle = grad; mctx.fill();
-    drawLine('valence', '#63e2ff', false);
-    drawLine('arousal', '#ff7b9c', true);
-    mctx.fillStyle = 'rgba(143,163,199,.8)'; mctx.font = '10px "Segoe UI","Microsoft YaHei",sans-serif';
-    mctx.fillText('+1', 2, 10); mctx.fillText('0', 2, h / 2); mctx.fillText('-1', 2, h - 16);
-    mctx.textAlign = 'right'; mctx.fillText('愉悦', w - 4, 10); mctx.fillStyle = 'rgba(255,123,156,.85)'; mctx.fillText('唤醒', w - 4, 22); mctx.textAlign = 'left';
+    var c = $('moodChart');
+    if (!c) return;
+    var rect = c.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var w = Math.max(100, rect.width), h = Math.max(80, rect.height);
+    c.width = Math.floor(w * dpr); c.height = Math.floor(h * dpr);
+    var g = c.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, w, h);
+    var pts = (S.moodPoints || []).slice();
+    if (!pts.length && S.live && S.live.mood) pts = [{ t: Date.now(), valence: S.live.mood.valence, arousal: S.live.mood.arousal }];
+    var padL = 4, padR = 4, padT = 10, padB = 8;
+    var minT = pts.length ? Math.min.apply(null, pts.map(function (p) { return p.t; })) : Date.now() - 86400000;
+    var maxT = pts.length ? Math.max.apply(null, pts.map(function (p) { return p.t; })) : Date.now();
+    if (maxT - minT < 60000) maxT = minT + 60000;
+    function px(t) { return padL + (w - padL - padR) * ((t - minT) / (maxT - minT)); }
+    function py(v) { return padT + (h - padT - padB) * (1 - (clamp(v, -1, 1) + 1) / 2); }
+    g.strokeStyle = 'rgba(116, 169, 224,.10)'; g.lineWidth = 1;
+    [0, .5, 1].forEach(function (ratio) {
+      var y = padT + (h - padT - padB) * ratio;
+      g.beginPath(); g.moveTo(padL, y); g.lineTo(w - padR, y); g.stroke();
+    });
+    if (pts.length > 1) {
+      g.beginPath();
+      pts.forEach(function (p, i) { var x = px(p.t), y = py(p.valence); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); });
+      g.lineTo(px(pts[pts.length - 1].t), h - padB); g.lineTo(px(pts[0].t), h - padB); g.closePath();
+      var grad = g.createLinearGradient(0, padT, 0, h);
+      grad.addColorStop(0, 'rgba(115, 220, 255,.16)'); grad.addColorStop(1, 'rgba(115, 220, 255,0)');
+      g.fillStyle = grad; g.fill();
+    }
+    function line(key, col, dash) {
+      if (!pts.length) return;
+      g.beginPath();
+      pts.forEach(function (p, i) { var x = px(p.t), y = py(p[key]); if (i === 0) g.moveTo(x, y); else g.lineTo(x, y); });
+      g.strokeStyle = col; g.lineWidth = 1.5; g.setLineDash(dash || []); g.stroke(); g.setLineDash([]);
+      var last = pts[pts.length - 1];
+      g.fillStyle = col; g.beginPath(); g.arc(px(last.t), py(last[key]), 2.4, 0, Math.PI * 2); g.fill();
+    }
+    line('valence', '#73dcff', []);
+    line('arousal', '#ff92ae', [4, 4]);
+    g.fillStyle = 'rgba(111, 137, 166,.7)'; g.font = '9px "Microsoft YaHei", sans-serif';
+    g.fillText('+1', 2, 10); g.fillText('0', 2, h / 2); g.fillText('-1', 2, h - 12);
+    g.textAlign = 'right'; g.fillStyle = 'rgba(115, 220, 255,.72)'; g.fillText('愉悦', w - 3, 10);
+    g.fillStyle = 'rgba(255, 146, 174,.72)'; g.fillText('唤醒', w - 3, 21); g.textAlign = 'left';
   }
 
-  function renderThoughts() {
-    const list = (state.thoughts || []).slice(-8).reverse();
-    $('thoughtCount').textContent = list.length ? ('最近 ' + list.length + ' 条') : '';
-    $('thoughts').innerHTML = list.map((t) => {
-      const kind = t.kind === 'dream' ? '梦' : t.kind === 'action' ? '行动' : '想';
-      return '<div class="thought"><b>' + kind + '</b>' + escapeHtml(String(t.text || '').slice(0, 110)) + '</div>';
-    }).join('') || '<div class="thought" style="color:#6f84a8">还没有内心活动</div>';
-  }
-
-  function renderCognition() {
-    const cog = state.cognition || {};
-    const sig = cog.signals || {};
-    const focus = cog.cognition && cog.cognition.focus;
-    const parts = [];
-    if (sig.clock) parts.push('真实时间：' + sig.clock + '（' + (sig.period || '') + '）');
-    if (focus && focus.label) parts.push('此刻注意力：' + focus.label);
-    if (cog.cognition && cog.cognition.time && cog.cognition.time.sinceInteractionText) parts.push('距上次说话 ' + cog.cognition.time.sinceInteractionText);
-    $('nowline').textContent = parts.join(' · ') || '真实时间加载中…';
-  }
-
-  function renderState() {
-    const mood = state.live?.mood || {};
-    const v = Number(mood.valence) || 0, a = Number(mood.arousal) || 0;
-    $('moodValence').textContent = (v >= 0 ? '+' : '') + v.toFixed(2);
-    $('moodArousal').textContent = a.toFixed(2);
-    const needs = state.live?.needs || {};
-    const labels = { social:'陪伴', curiosity:'好奇', rest:'休息', security:'安全感', esteem:'被重视' };
-    $('needs').innerHTML = Object.entries(labels).map(([k, label]) => {
-      const val = Math.max(0, Math.min(100, Number(needs[k]) || 0));
-      return '<div class="need"><span style="width:38px">' + label + '</span><span class="bar"><i style="width:' + val + '%"></i></span><span>' + Math.round(val) + '</span></div>';
-    }).join('');
+  function renderMood() {
+    var mood = (S.live && S.live.mood) || {};
+    $('moodValence').textContent = (Number(mood.valence) >= 0 ? '+' : '') + (Number(mood.valence) || 0).toFixed(2);
+    $('moodArousal').textContent = (Number(mood.arousal) || 0).toFixed(2);
     drawMood();
   }
+  window.addEventListener('resize', function () { drawMood(); });
 
+  function renderThoughts() {
+    var list = (S.thoughts || []).slice(-8).reverse();
+    $('thoughtCount').textContent = list.length ? '最近 ' + list.length + ' 条' : '';
+    $('thoughts').innerHTML = list.length ? list.map(function (t) {
+      var kind = t.kind === 'dream' ? '梦' : t.kind === 'action' ? '行动' : '想';
+      var emotion = t.meta && t.meta.emotion ? '<span class="emotion">' + escapeHtml(t.meta.emotion) + '</span>' : '';
+      return '<div class="thoughtCard"><div class="meta"><span class="kind">' + kind + '</span><span>' + fmtTime(t.at) + '</span>' + emotion + '</div>' + escapeHtml(String(t.text || '')) + '</div>';
+    }).join('') : '<div class="emptyLine">还没有内心活动</div>';
+  }
+
+  function appraisalText(ev) {
+    var a = ev.appraisal || {};
+    var bits = [];
+    var g = Number(a.goalCongruence) || 0;
+    if (g > 0.12) bits.push('目标一致'); else if (g < -0.12) bits.push('目标受阻');
+    if (a.agency === 'owner') bits.push('主人'); else if (a.agency === 'self') bits.push('自己'); else if (a.agency === 'other') bits.push('对方');
+    if (Number(a.relationship) > 0.1) bits.push('关系靠近');
+    if (Number(a.novelty) > 0.55) bits.push('新鲜');
+    return bits.join(' · ');
+  }
   function renderEvents() {
-    const list = state.events.slice(-10).reverse();
-    $('eventCount').textContent = '事件 ' + (state.live?.events || state.events.length) + ' 条';
-    $('events').innerHTML = list.map((ev) => {
-      const emo = (ev.emotions || []).map((x) => x.label || x.type).slice(0, 3).join(' ');
-      const text = (ev.text || ev.summary || '').replace(/\s+/g, ' ').slice(0, 110);
-      const t = String(ev.at || '').slice(11, 19);
-      return '<div class="event"><b>' + t + '</b> ' + escapeHtml(text) + (emo ? ' <span style="color:#8fa6cc">[' + escapeHtml(emo) + ']</span>' : '') + '</div>';
-    }).join('');
+    var all = S.events || [];
+    var list = all.slice(-12).reverse();
+    $('eventCount').textContent = all.length ? '最近 ' + all.length + ' 条' : '';
+    $('events').innerHTML = list.length ? list.map(function (ev) {
+      var platform = ev.platform === 'qq' ? (ev.isPrivate ? 'QQ · 私聊' : 'QQ · 群') : ev.platform === 'bili' ? 'B站' : ev.platform === 'mind' ? '内心' : (ev.platform || '事件');
+      var text = String(ev.text || '');
+      var summary = String(ev.summary || '');
+      var body = text || summary || ev.type || '';
+      var emos = (ev.emotions || []).map(function (x) { return x.label || x.type; }).filter(Boolean).slice(0, 3).join(' · ');
+      var assess = appraisalText(ev);
+      return '<div class="eventCard"><div class="row1"><span class="time">' + fmtTime(ev.at) + '</span><span class="tag">' + escapeHtml(platform) + '</span><span class="tag">' + escapeHtml(ev.type || 'event') + '</span></div><div class="body">' + escapeHtml(body) + '</div>' +
+        (assess || emos ? '<div class="assess">' + (assess ? '评估：' + escapeHtml(assess) : '') + (emos ? (assess ? ' · ' : '') + '<span class="emotion">' + escapeHtml(emos) + '</span>' : '') + '</div>' : '') + '</div>';
+    }).join('') : '<div class="emptyLine">还没有事件</div>';
   }
 
-  function sizeMini() {
-    const dpr = window.devicePixelRatio || 1;
-    const w = mini.clientWidth || 340, h = mini.clientHeight || 250;
-    mini.width = w * dpr; mini.height = h * dpr;
-    minictx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  }
-
-  window.addEventListener('error', (e) => { try { $('meta').textContent = 'JS错误：' + (e.message || 'unknown'); } catch {} });
-  function openRegion(id) {
-    state.selected = id;
-    const r = REGIONS.find((x) => x.id === id);
-    if (!r) return;
-    const stats = state.regions.find((x) => x.id === id) || { nodeCount:0, activeCount:0, importanceAvg:0, eventCount:0, metrics:{} };
-    $('regionName').textContent = r.name + ' · ' + r.desc;
-    $('regionDesc').textContent = '这是她在“' + r.name + '”这一刻的真实活动。节点来自记忆图谱，颜色越亮表示她觉得越重要。';
-    $('regionStats').innerHTML = [['节点', stats.nodeCount], ['活跃', stats.activeCount], ['近24h事件', stats.eventCount || 0]]
-      .map(([k, v]) => '<div class="stat"><b>' + v + '</b><span>' + k + '</span></div>').join('');
-    const metrics = stats.metrics && Object.keys(stats.metrics).length ? stats.metrics : { 重要度均值: stats.importanceAvg || 0 };
-    $('regionMetrics').innerHTML = Object.entries(metrics).map(([k, v]) => '<span>' + escapeHtml(k) + '：' + v + '</span>').join('');
-    if (Array.isArray(stats.emotionList) && stats.emotionList.length) {
-      $('regionMetrics').innerHTML += stats.emotionList.map((e) => '<span>' + escapeHtml(e.label || e.type) + ' ' + Math.round((e.intensity || 0) * 100) + '%</span>').join('');
-    }
-    $('regionPanel').classList.add('open');
-    sizeMini();
-    drawMini();
-    drawBrain(performance.now());
-  }
-  function closeRegion() {
-    state.selected = null;
-    $('regionPanel').classList.remove('open');
-    drawBrain(performance.now());
-  }
-
-  function drawMini() {
-    const w = mini.clientWidth || 340, h = mini.clientHeight || 250;
-    minictx.clearRect(0, 0, w, h);
-    const nodes = state.graph.nodes.filter((n) => n.region === state.selected);
-    const ids = new Set(nodes.map((n) => n.id));
-    const edges = state.graph.edges.filter((e) => ids.has(e.from) || ids.has(e.to));
-    if (!nodes.length) {
-      minictx.fillStyle = 'rgba(143,166,204,.75)'; minictx.font = '12px "Segoe UI","Microsoft YaHei",sans-serif'; minictx.textAlign = 'center';
-      minictx.fillText('这个脑区暂时没有记忆节点，更多是“状态”', w / 2, h / 2 - 6);
-      minictx.fillText('等她在 QQ 里聊起来，这里会慢慢长出来', w / 2, h / 2 + 16);
-      return;
-    }
-    const cx = w / 2, cy = h / 2;
-    const positions = new Map();
-    nodes.forEach((n, i) => {
-      const a = i * 2.399; const rr = 18 + Math.sqrt(i) * (Math.min(w, h) / 18);
-      positions.set(n.id, { x: cx + Math.cos(a) * rr * 1.05, y: cy + Math.sin(a) * rr * .78, n });
+  function renderLive(data) {
+    if (!data) return;
+    S.live = Object.assign({}, S.live || {}, {
+      mood: data.mood || (S.live && S.live.mood),
+      needs: data.needs || (S.live && S.live.needs),
+      physiology: data.physiology || (S.live && S.live.physiology),
+      updatedAt: data.updatedAt,
+      events: data.events
     });
-    minictx.strokeStyle = 'rgba(130,180,255,.22)'; minictx.lineWidth = 1;
-    for (const e of edges) {
-      const a = positions.get(e.from), b = positions.get(e.to); if (!a || !b) continue;
-      minictx.beginPath(); minictx.moveTo(a.x, a.y); minictx.lineTo(b.x, b.y); minictx.stroke();
+    var last = S.moodPoints[S.moodPoints.length - 1];
+    if (!last || Date.now() - last.t > 3000) {
+      S.moodPoints.push({ t: Date.now(), valence: Number(S.live.mood && S.live.mood.valence) || 0, arousal: Number(S.live.mood && S.live.mood.arousal) || 0 });
     }
-    for (const p of positions.values()) {
-      const imp = Number(p.n.importance) || 20;
-      const r = 2.4 + Math.min(4, imp / 30);
-      minictx.beginPath(); minictx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      minictx.fillStyle = importanceColor(imp); minictx.fill();
-      if (imp >= 80 || p.n.type === 'person') {
-        minictx.fillStyle = 'rgba(226,238,255,.85)'; minictx.font = '10px "Segoe UI","Microsoft YaHei",sans-serif';
-        minictx.fillText(String(p.n.label || '').slice(0, 14), p.x + r + 2, p.y + 3);
-      }
-    }
-    minictx.fillStyle = 'rgba(143,166,204,.7)'; minictx.font = '10px "Segoe UI","Microsoft YaHei",sans-serif';
-    minictx.fillText(nodes.length + ' 节点 · ' + edges.length + ' 连线', 8, h - 8);
+    if (S.moodRange === 24 && S.moodPoints.length > 2400) S.moodPoints = S.moodPoints.slice(-2400);
+    S.lastLive = Date.now();
+    renderMood(); renderNeeds(); updateSync();
   }
 
-  function toLocal(ev) {
-    const { cx, cy, s } = brainTransform();
-    return { x: (ev.clientX - cx) / s, y: (ev.clientY - cy) / s };
+  function mergeMoodSeries(points) {
+    if (!Array.isArray(points)) return;
+    var byT = new Map();
+    points.forEach(function (p) { if (p && isFinite(p.t)) byT.set(Number(p.t), p); });
+    var now = Date.now();
+    S.moodPoints = Array.from(byT.values()).filter(function (p) { return now - p.t <= 86400000 * 8; }).sort(function (a, b) { return a.t - b.t; });
   }
-  function hitRegion(ev) {
-    const p = toLocal(ev);
-    let best = null, bestD = 1e9;
-    for (const r of REGIONS) {
-      const d = Math.hypot(p.x - r.x, p.y - r.y);
-      if (d < bestD) { bestD = d; best = r; }
-    }
-    return bestD < 78 ? best : null;
-  }
-  brainCanvas.addEventListener('mousemove', (ev) => {
-    const r = hitRegion(ev);
-    state.hover = r ? r.id : null;
-    brainCanvas.style.cursor = r ? 'pointer' : 'crosshair';
-    drawBrain(performance.now());
-  });
-  brainCanvas.addEventListener('click', (ev) => {
-    const r = hitRegion(ev);
-    if (r) openRegion(r.id); else closeRegion();
-  });
-  $('btnCloseRegion').onclick = closeRegion;
-  $('btnBack').onclick = closeRegion;
-  $('btnOverview').onclick = closeRegion;
-  $('btnRefresh').onclick = () => loadAll(true);
 
-  async function loadAll(force) {
+  function applyGraph(data) {
+    var nodes = data.nodes || [];
+    var edges = data.edges || [];
+    var key = JSON.stringify({ n: nodes.length, e: edges.length, u: data.updatedAt || '' });
+    S.graphUpdatedAt = data.updatedAt || '';
+    if (key === S.graphKey) return false;
+    S.graphKey = key;
+    S.rawNodes = nodes;
+    S.rawEdges = edges;
+    S.rawStats = data.stats || {};
+    S.empty = nodes.length === 0;
+    $('empty').style.display = S.empty ? 'flex' : 'none';
+    buildModel();
+    S.firstLoad = false;
+    scheduleDraw();
+    return true;
+  }
+
+  async function loadAll(initial) {
+    if (S.busy) return;
+    S.busy = true;
     try {
-      const [stateData, graphData, regionsData, eventData, moodData, cognitionData, thoughtsData] = await Promise.all([
+      var results = await Promise.all([
         fetchJson(API_BASE + '/state'),
         fetchJson(API_BASE + '/graph'),
-        fetchJson(API_BASE + '/regions'),
-        fetchJson(API_BASE + '/events?limit=40'),
-        fetchJson(API_BASE + '/mood-history?hours=24'),
-        fetchJson(API_BASE + '/cognition'),
-        fetchJson(API_BASE + '/thoughts?limit=8'),
+        fetchJson(API_BASE + '/events?limit=60'),
+        fetchJson(API_BASE + '/mood-history?hours=' + S.moodRange),
+        fetchJson(API_BASE + '/thoughts?limit=12'),
+        fetchJson(API_BASE + '/cognition')
       ]);
-      state.live = { mood: stateData.state?.affect?.mood, needs: stateData.state?.affect?.needs, physiology: stateData.state?.affect?.physiology, updatedAt: stateData.state?.updatedAt, events: stateData.state?.stats?.events };
-      state.graph = graphData;
-      state.regions = regionsData.regions || [];
-      state.events = eventData.events || [];
-      state.moodPoints = moodData.points || [];
-      state.cognition = cognitionData || {};
-      state.thoughts = thoughtsData.thoughts || [];
-      renderCognition(); renderThoughts();
-      const conf = graphData.stats || {};
-      $('meta').textContent = '节点 ' + (conf.nodes || state.graph.nodes.length) + ' · 连线 ' + (conf.edges || state.graph.edges.length) + ' · 同步 ' + (graphData.updatedAt ? String(graphData.updatedAt).slice(11, 19) : '—');
-      $('liveStatus').textContent = '● 实时'; $('liveStatus').style.color = '#8affc1';
-      renderState(); renderEvents(); drawBrain(performance.now());
-      if (state.selected) openRegion(state.selected);
-      $('empty').style.display = state.graph.nodes.length ? 'none' : 'flex';
-      if (force) $('meta').textContent += ' · 已刷新';
+      var stateData = results[0], graphData = results[1], eventData = results[2], moodData = results[3], thoughtData = results[4], cognition = results[5];
+      S.live = {
+        mood: stateData.state && stateData.state.affect && stateData.state.affect.mood,
+        needs: stateData.state && stateData.state.affect && stateData.state.affect.needs,
+        physiology: stateData.state && stateData.state.affect && stateData.state.affect.physiology,
+        updatedAt: stateData.state && stateData.state.updatedAt,
+        events: stateData.state && stateData.state.stats && stateData.state.stats.events
+      };
+      S.events = eventData.events || [];
+      S.thoughts = thoughtData.thoughts || [];
+      S.cognition = cognition || {};
+      mergeMoodSeries(moodData.points || []);
+      applyGraph(graphData);
+      S.lastSync = Date.now();
+      renderLive(S.live);
+      renderMood(); renderNeeds(); renderThoughts(); renderEvents(); updateMeta(); updateSync();
+      if (initial) { resizeCanvas(); fitView(); }
     } catch (error) {
-      $('meta').textContent = '加载失败：' + (error && error.message ? error.message : error);
-      $('liveStatus').textContent = '● 离线'; $('liveStatus').style.color = '#ff7b9c';
+      $('meta').textContent = '加载失败：' + String((error && error.message) || error);
+      $('syncDot').style.background = '#ff92ae';
+      $('syncText').textContent = '离线';
+    } finally {
+      S.busy = false;
     }
   }
 
-  function applyLive(data) {
-    if (!data) return;
-    state.live = { ...(state.live || {}), mood: data.mood, needs: data.needs, physiology: data.physiology, updatedAt: data.updatedAt, events: data.events };
-    const now = Date.now();
-    const last = state.moodPoints[state.moodPoints.length - 1];
-    if (!last || now - last.t > 12000) state.moodPoints.push({ t:now, valence:Number(data.mood?.valence)||0, arousal:Number(data.mood?.arousal)||0 });
-    if (state.moodPoints.length > 240) state.moodPoints = state.moodPoints.slice(-240);
-    renderState();
-    $('liveStatus').textContent = '● 实时'; $('liveStatus').style.color = '#8affc1';
+  async function syncTick() {
+    if (S.busy || document.hidden) return;
+    S.busy = true;
+    try {
+      var results = await Promise.all([
+        fetchJson(API_BASE + '/graph'),
+        fetchJson(API_BASE + '/state'),
+        fetchJson(API_BASE + '/events?limit=60'),
+        fetchJson(API_BASE + '/thoughts?limit=12')
+      ]);
+      var graphData = results[0], stateData = results[1], eventData = results[2], thoughtData = results[3];
+      var changed = applyGraph(graphData);
+      S.events = eventData.events || [];
+      S.thoughts = thoughtData.thoughts || [];
+      var affect = stateData.state && stateData.state.affect;
+      if (affect) {
+        S.live = Object.assign({}, S.live || {}, {
+          mood: affect.mood, needs: affect.needs, physiology: affect.physiology,
+          updatedAt: stateData.state.updatedAt, events: stateData.state.stats && stateData.state.stats.events
+        });
+      }
+      S.lastSync = Date.now();
+      renderLive(S.live);
+      renderNeeds(); renderThoughts(); renderEvents(); updateSync();
+      if (changed) { drawDirty = true; }
+    } catch (error) {
+      $('syncDot').style.background = '#ffd37b';
+      $('syncText').textContent = '重连中';
+    } finally {
+      S.busy = false;
+    }
   }
 
   function startLive() {
-    if (state.es) { try { state.es.close(); } catch {} state.es = null; }
-    if (API_BASE === '/api/brain' && window.EventSource) {
+    if (window.EventSource) {
       try {
-        state.es = new EventSource(API_BASE + '/stream' + (BRAIN_TOKEN ? '?token=' + encodeURIComponent(BRAIN_TOKEN) : ''));
-        state.es.onmessage = (ev) => { try { state.lastLiveAt = Date.now(); applyLive(JSON.parse(ev.data)); } catch {} };
-        state.es.onerror = () => { $('liveStatus').textContent = '● 重连中'; $('liveStatus').style.color = '#ffd166'; };
-      } catch {}
+        var source = new EventSource(withToken(API_BASE + '/stream'));
+        source.onmessage = function (event) {
+          try { var data = JSON.parse(event.data); renderLive(data); S.lastSync = Date.now(); updateSync(); } catch (e) {}
+        };
+        source.onerror = function () {
+          $('syncDot').style.background = '#ffd37b';
+          $('syncText').textContent = '流断开，轮询中';
+        };
+      } catch (e) {}
     }
-    if (state.timer) clearInterval(state.timer);
-    state.timer = setInterval(async () => {
-      try {
-        const [s, ev] = await Promise.all([fetchJson(API_BASE + '/state'), fetchJson(API_BASE + '/events?limit=40')]);
-        state.live = { mood:s.state?.affect?.mood, needs:s.state?.affect?.needs, physiology:s.state?.affect?.physiology, updatedAt:s.state?.updatedAt, events:s.state?.stats?.events };
-        state.events = ev.events || [];
-        applyLive({ mood:state.live.mood, needs:state.live.needs, physiology:state.live.physiology, updatedAt:state.live.updatedAt, events:state.live.events });
-        renderEvents();
-      } catch {}
-    }, 5000);
-    setInterval(() => { if (!state.selected) loadAll(false); }, 30000);
+    setInterval(syncTick, 2000);
+    setInterval(updateSync, 500);
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+  function renderCognition() {
+    var c = S.cognition || {};
+    var sig = c.signals || {};
+    var focus = c.cognition && c.cognition.focus;
+    var bits = [];
+    if (sig.clock) bits.push(String(sig.clock));
+    if (sig.period) bits.push(String(sig.period));
+    if (focus && focus.label) bits.push('注意力：' + focus.label);
+    if (bits.length) $('stageHintSmall').textContent = bits.join(' · ');
   }
 
-  function loop(t) {
-    if (state.hover || state.selected || Math.floor(t / 120) % 2 === 0) drawBrain(t);
-    requestAnimationFrame(loop);
+  // Search
+  var searchInput = $('search');
+  var searchResults = $('searchResults');
+  function searchNodes(q) {
+    var query = String(q || '').trim().toLowerCase();
+    if (!query) return [];
+    return S.visible.filter(function (n) {
+      return String(labelOf(n) || '').toLowerCase().indexOf(query) !== -1 || String(n.label || '').toLowerCase().indexOf(query) !== -1 || String(n.text || '').toLowerCase().indexOf(query) !== -1;
+    }).sort(function (a, b) { return importanceOf(b) - importanceOf(a); }).slice(0, 8);
   }
+  function showSearchResults() {
+    var list = searchNodes(searchInput.value);
+    if (!list.length) { searchResults.classList.remove('open'); searchResults.innerHTML = ''; return; }
+    searchResults.innerHTML = list.map(function (n) {
+      return '<div class="searchResult" data-open="' + escapeHtml(n.id) + '">' + escapeHtml(String(labelOf(n) || '').slice(0, 30)) + '<small>' + escapeHtml(TYPES[n.type] ? TYPES[n.type].label : n.type) + '</small></div>';
+    }).join('');
+    searchResults.classList.add('open');
+  }
+  searchInput.addEventListener('input', showSearchResults);
+  searchInput.addEventListener('focus', showSearchResults);
+  searchInput.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter') {
+      var list = searchNodes(searchInput.value);
+      if (list.length) { focusNode(list[0].id); searchResults.classList.remove('open'); }
+    }
+    if (ev.key === 'Escape') { searchResults.classList.remove('open'); searchInput.blur(); }
+  });
+  searchResults.addEventListener('click', function (ev) {
+    var hit = ev.target.closest('[data-open]');
+    if (!hit) return;
+    focusNode(hit.getAttribute('data-open'));
+    searchResults.classList.remove('open');
+    searchInput.value = '';
+  });
+  document.addEventListener('click', function (ev) {
+    if (!ev.target.closest('.searchWrap')) searchResults.classList.remove('open');
+  });
 
-  resize();
-  loadAll(false);
-  startLive();
-  setInterval(async () => {
-    try {
-      const [cog, th] = await Promise.all([fetchJson(API_BASE + '/cognition'), fetchJson(API_BASE + '/thoughts?limit=8')]);
-      state.cognition = cog; state.thoughts = th.thoughts || [];
-      renderCognition(); renderThoughts();
-    } catch {}
-  }, 20000);
-  const initialRegion = new URLSearchParams(location.search).get('region');
-  if (initialRegion) setTimeout(() => { try { openRegion(initialRegion); } catch {} }, 1400);
-  requestAnimationFrame(loop);
+  // Range buttons
+  document.querySelectorAll('#rangeSeg button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('#rangeSeg button').forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      S.moodRange = Number(btn.getAttribute('data-range')) || 24;
+      fetchJson(API_BASE + '/mood-history?hours=' + S.moodRange).then(function (data) {
+        mergeMoodSeries(data.points || []); drawMood();
+      }).catch(function () {});
+    });
+  });
+
+  $('btnReset').onclick = function () { resetView(); };
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape') { closeDetail(); searchResults.classList.remove('open'); } });
+
+  // boot
+  resizeCanvas();
+  requestAnimationFrame(animationLoop);
+  loadAll(true).then(function () {
+    startLive();
+    renderCognition();
+  });
+  setInterval(function () {
+    fetchJson(API_BASE + '/cognition').then(function (c) { S.cognition = c; renderCognition(); }).catch(function () {});
+    fetchJson(API_BASE + '/mood-history?hours=' + S.moodRange).then(function (data) {
+      mergeMoodSeries(data.points || []); drawMood();
+    }).catch(function () {});
+  }, 12000);
 })();
 </script>
 </body>

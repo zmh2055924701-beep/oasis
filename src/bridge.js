@@ -1,4 +1,4 @@
-// QQ ↔ DeepSeek Harness 桥接主程序。
+﻿// QQ ↔ DeepSeek Harness 桥接主程序。
 //
 // 链路：
 //   QQ 消息 → SnowLuma (OneBot v11 WS) → 本进程 → DSH Web API session.prompt
@@ -71,10 +71,11 @@ import {
   pickGreetingTheme, planMorningGreeting,
 } from './greeting-schedule.js';
 import {
-  analyzePersona, applyPurposeOutcome, buildPurposePrompt, collectMaterials, deriveDrives,
+  analyzePersona, applyGoalFeedback, applyPurposeOutcome, buildPurposePrompt, collectMaterials, deriveDrives,
   ensurePurposeDay, ensurePurposeSchedule, evaluatePurposeTick, formGoalHypotheses,
   markPurposeDelivered, markPurposeSkip, minePurposeSeeds, normalizePurposeConfig,
-  normalizePurposeState, parsePurposeMemo, planNextFire, selectPurpose, summarizePurposeState,
+  normalizePurposeState, parsePurposeMemo, planNextFire, prunePurposeState, reconcilePurposeCompletion,
+  selectPurpose, summarizePurposeState, completeGoal, completePendingPurpose, migratePurposeState,
 } from './purpose-engine.js';
 import { resolvePriceTable } from './model-prices.js';
 import {
@@ -99,7 +100,7 @@ import {
   appendMemoryInboxEvent, loadMemoryCard, looksNoteworthyMessage, resolveMemoryCardPaths,
 } from './memory-card.js';
 import {
-  activeMemoryPaths, activePersonaFile, activePlatformStateDir, characterPaths, readCurrentCharacter,
+  activeBiliDir, activeMemoryPaths, activePersonaFile, activePlatformStateDir, characterPaths, readCurrentCharacter,
 } from './character-persona.js';
 import { createBiliDynamicsSync } from './bili-dynamics.js';
 import { createBiliShareScheduler } from './bili-share-scheduler.js';
@@ -1777,6 +1778,7 @@ async function main() {
     fs.mkdirSync(STATE_DIR, { recursive: true });
   }
   let purposeState = normalizePurposeState(readJsonSafe(PURPOSE_FILE, null));
+  try { migratePurposeState(purposeState, { now: Date.now(), config: cfg.purpose }); } catch (error) { log('目的状态迁移失败：' + String(error?.message ?? error)); }
   // 上次进程在回合中途退出：不知道她到底发没发出去。别立刻补发（会变成连发），
   // 记成 interrupted，等一个初始延迟后再来一次。
   if (purposeState.lastOutcome === 'pending') {
@@ -1867,7 +1869,15 @@ async function main() {
 
   // B站那边的角色：把公开经历做成记忆，注入 QQ 提示词；动态与每日分享在启动时排定。
   // 隐私：这个模块只读公开数据与公开见闻，不读任何私信文件。
-  const biliMemory = createBiliMemory({ stateDir: PLATFORM_STATE_DIR, log, likesFile: path.join(OASIS_DIR, 'oasis-likes.json') });
+  // 注意：B站 行为账本（scores/favorites/quota/日记）在角色包 `characters/<id>/bili` 里，
+  // 不是旧账号目录 `~/.dsh/oasis/bili`。以前 bili-memory 内部用 resolveBiliPaths(home).bili
+  // 读旧目录，角色化后分享池恒空（2026-11-06 修，见 PITFALLS）。
+  const biliMemory = createBiliMemory({
+    stateDir: PLATFORM_STATE_DIR,
+    biliDir: activeBiliDir(),
+    log,
+    likesFile: path.join(OASIS_DIR, 'oasis-likes.json'),
+  });
   let biliDynamics = null;
   let biliShare = null;
 
@@ -4898,11 +4908,22 @@ async function main() {
         }
         // ── B站记忆 / 动态 / 分享（管理端只读状态 + 手动触发，供排查）─────────
         if (req.method === 'GET' && url.pathname === '/api/bili/status') {
+          // share.ready：用与分享调度**同一套**挑卡逻辑（含“6 天内发过”的冷却）判断
+          // “现在点分享到底发不发得出去”。插件在申请「分享到 QQ 群」审批前先查它，
+          // 避免素材池空时还反复向主人申请、同意了却什么都没发（2026-11-06 事故）。
+          let shareStatus = biliShare?.status() ?? { enabled: false };
+          if (biliShare) {
+            let ready = false;
+            try { ready = Boolean(biliMemory.pickShareCard({})); } catch { ready = false; }
+            shareStatus = { ...shareStatus, ready };
+          } else {
+            shareStatus = { ...shareStatus, ready: false };
+          }
           sendJson({
             enabled: cfg.biliBridge?.enabled !== false,
             memory: biliMemory.status(),
             dynamics: biliDynamics?.status() ?? { enabled: false },
-            share: biliShare?.status() ?? { enabled: false },
+            share: shareStatus,
             groups: {
               allow: cfg.allow?.groups ?? [],
               dynamics: cfg.biliBridge?.dynamics?.groups ?? [],
@@ -5799,6 +5820,27 @@ async function main() {
             sendJson(result, result.ok ? 200 : 409);
           } catch (error) {
             sendJson({ ok: false, error: `试一次失败：${error?.message ?? error}` }, 500);
+          }
+          return;
+        }
+        if (req.method === 'POST' && url.pathname === '/api/purpose/complete') {
+          // 手动结案：只改 purpose 状态，不删记忆、不改人格。
+          try {
+            const body = await readBody();
+            const now = Date.now();
+            const goal = completeGoal(purposeState.goals, {
+              goalId: String(body.goalId || ''), text: String(body.text || ''), now, source: 'manual',
+            });
+            const pending = completePendingPurpose(purposeState, {
+              pendingId: String(body.pendingId || ''), text: String(body.text || ''), now, source: 'manual',
+            });
+            if (!goal && !pending) { sendJson({ ok: false, error: '没有匹配到目的/待续' }, 404); return; }
+            reconcilePurposeCompletion(purposeState, { now });
+            prunePurposeState(purposeState, { now, config: cfg.purpose });
+            savePurposeState();
+            sendJson({ ok: true, goal, pending, state: summarizePurposeState(purposeState, { config: cfg.purpose, now }) });
+          } catch (error) {
+            sendJson({ ok: false, error: `结案失败：${error?.message ?? error}` }, 500);
           }
           return;
         }
@@ -11833,8 +11875,13 @@ async function main() {
       }
     }
 
+    if (!preview) {
+      // 先把已完成/已过期/到事件日期的目的结案，再重新生成候选。
+      reconcilePurposeCompletion(purposeState, { now });
+      prunePurposeState(purposeState, { now, config: cfg.purpose });
+    }
     const ctx = preparePurposeContext(now, st);
-    const { packet, materials, pending, persona, hasSelfSource, derived, drives, formed } = ctx;
+    let { packet, materials, pending, persona, hasSelfSource, derived, drives, formed } = ctx;
     if (!preview) {
       purposeState.drives = drives;
       purposeState.drivesAt = derived.drivesAt;
@@ -11842,6 +11889,9 @@ async function main() {
       purposeState.observations = formed.observations;
       purposeState.lastMaterialCount = materials.length;
       purposeState.lastCandidateCount = 0;
+      reconcilePurposeCompletion(purposeState, { now });
+      prunePurposeState(purposeState, { now, config: cfg.purpose });
+      pending = purposeState.pending;
     }
     if (!preview && materials.length < cfg.purpose.minMaterials && pending.length === 0 && !hasSelfSource) {
       const next = planNextFire({
@@ -12057,6 +12107,8 @@ async function main() {
       purposeState.goals = ctx.formed.goals;
       purposeState.observations = ctx.formed.observations;
       purposeState.lastMaterialCount = ctx.materials.length;
+      reconcilePurposeCompletion(purposeState, { now });
+      prunePurposeState(purposeState, { now, config: cfg.purpose });
       // 预热时也算一次候选（不投递），让设置页的「素材→观察→目标→候选」链路是完整的。
       const roleName = String(readRoleState().role || '');
       const seeds = minePurposeSeeds({
@@ -13328,6 +13380,24 @@ async function main() {
   }
 
   // ── 二代仿真模式（reserved2）唤醒调度 ──────────────────────────────────
+  function maybeCompletePurposeFromOwnerMessage(key, textContent, now) {
+    if (!isOwnerPrivateKey(key)) return;
+    if (!purposeState || !Array.isArray(purposeState.goals) || !purposeState.goals.length) return;
+    const before = purposeState.goals.filter((g) => g.status === 'done').length;
+    applyGoalFeedback(purposeState.goals, [{ kind: 'owner', at: now, text: String(textContent || '') }], now);
+    reconcilePurposeCompletion(purposeState, { now });
+    prunePurposeState(purposeState, { now, config: cfg.purpose });
+    const after = purposeState.goals.filter((g) => g.status === 'done').length;
+    const pendingBefore = Array.isArray(purposeState.pending) ? purposeState.pending.length : 0;
+    if (after > before || pendingBefore !== (Array.isArray(purposeState.pending) ? purposeState.pending.length : 0)) {
+      savePurposeState();
+      log('[目的] 主人消息触发结案：' + String(textContent || '').slice(0, 60));
+    }
+  }
+  function isOwnerPrivateKey(key) {
+    return String(key || '').startsWith('private:') && String(key).endsWith(String(cfg.ownerQQ || ''));
+  }
+
   function appendSocialV2Message(key, sender, textContent, plainContent, quoteTargetIsSelf, isOwner, messageId, media = [], userId = null, forwardIds = []) {
     const st = getSocialV2State(key);
     const recentLimit = Number(cfg.socialV2?.context?.recentLimit) || 100;
@@ -13402,6 +13472,7 @@ async function main() {
       if (topicHit || participantHit) t.lastMentionAt = Date.now();
     }
     saveSocialV2State();
+    if (isOwner) maybeCompletePurposeFromOwnerMessage(key, plainContent ?? textContent, Date.now());
   }
 
   // 二代拍一拍事件写入最近/未读消息流，让 AI 能看到“谁拍了拍谁/拍了拍我”。

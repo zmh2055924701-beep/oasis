@@ -83,6 +83,9 @@ plugin_manager install_bundle target="<你的仓库路径>\plugins\oasis"
 素材 → 驱动 / 目标假设 → 选择目的 → 载体发送 → 回执记账 → 排下一枪
 ```
 
+> 2026-11-06 起，目的有短期/长期生命周期：目标/待续会记录事件日期，完成后进入 done，过期会清退；
+> 旧的 owner-topic 噪声和旧待续会在启动迁移时清理。设置页也可以手动完成目标或待续。
+
 | 载体 | 发送方式 | 触发条件 |
 | --- | --- | --- |
 | **QQ（默认）** | 桥接在她的 QQ 会话里调 `qq_send_private_message` | 需要 `reserved2` 模式 + ownerQQ 是好友 + 白名单 |

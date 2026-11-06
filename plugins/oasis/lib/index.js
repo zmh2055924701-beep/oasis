@@ -1,4 +1,4 @@
-/**
+﻿/**
  * oasis —— 宿主半边（设置窗口的唯一后端）。
  *
  * 它把原来两个插件的能力装进一个进程：
@@ -295,7 +295,7 @@ export function apply(ctx) {
       const list = [];
       const updCfg = readUnified().config?.updates ?? {};
       // 1) Oasis 本体：源码树，走 git
-      list.push({ id: 'oasis', name: 'Oasis 本体', dir: QQBOT_ROOT, kind: 'git', branch: 'main', versionRepo: 'zmh2055924701-beep/oasis' });
+      list.push({ id: 'oasis', name: 'Oasis 本体', dir: QQBOT_ROOT, kind: 'git', branch: 'main', versionRepo: 'Mieksido/oasis' });
       // 2) 语音包（bridge 管理的安装目录；config.json 的 voicePacks.dir 可覆盖）
       //    是 git clone 就走 git；不是则看有没有配版本清单（updates.voice.*VersionUrl）
       try {
@@ -304,11 +304,11 @@ export function apply(ctx) {
         const voice = updCfg.voice ?? {};
         list.push({
           id: 'surfvoice-local', name: '语音包（本地）', dir: path.join(packsDir, 'voice-local'),
-          kind: 'auto', branch: 'main', versionUrl: voice.localVersionUrl || '', versionRepo: '',
+          kind: 'auto', branch: 'main', versionUrl: voice.localVersionUrl || '', versionRepo: 'Mieksido/surfvoicelocal',
         });
         list.push({
           id: 'surfvoice-cloud', name: '语音包（云端）', dir: path.join(packsDir, 'voice-cloud'),
-          kind: 'auto', branch: 'main', versionUrl: voice.cloudVersionUrl || '', versionRepo: '',
+          kind: 'auto', branch: 'main', versionUrl: voice.cloudVersionUrl || '', versionRepo: 'Mieksido/surfvoicecloud',
         });
       } catch {}
       // 3) 桌宠：构建产物，走版本清单（zip 安装包）；更新交给 petService.updateFromZip（保留 data/）
@@ -680,7 +680,7 @@ export function apply(ctx) {
       handler: async (req, res) => {
         if (!isLoopbackReq(req)) { json(res, 403, { ok: false, error: '只接受本机回环访问' }); return; }
         if (req.method !== 'GET' && !sameOrigin(req)) { json(res, 403, { ok: false, error: '跨站请求被拒绝' }); return; }
-        if (SHADOW_MODE && req.method !== 'GET') { json(res, 403, { ok: false, error: '只读模式：写操作不可用' }); return; }
+        if (SHADOW_MODE && req.method !== 'GET') { json(res, 403, { ok: false, error: 'Oasis shadow 副本是只读的：写操作由旧插件负责' }); return; }
         if (req.method !== 'GET' && !String(req.headers['content-type'] ?? '').toLowerCase().includes('application/json')) {
           json(res, 415, { ok: false, error: '写操作必须是 application/json' });
           return;
@@ -2120,7 +2120,7 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output 
           events: { ...chatStatus.events, hostFile: petApi.hostFile },
           lastError: chatStatus.lastError,
           defaults: {
-            zipUrl: '',
+            zipUrl: 'https://github.com/Mieksido/surfpet/releases/latest/download/pet-pack.zip',
             electronUrl: electronDownloadUrl(),
             electronVersion: ELECTRON_VERSION,
           },
@@ -2296,6 +2296,16 @@ if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output 
           return;
         }
         const remote = await callBridge('/api/purpose/run', { method: 'POST', body: { force: body.force !== false }, timeoutMs: 30000 });
+        json(res, remote?.status || 200, { ...(remote?.data ?? {}), source: 'qq', carrier: 'qq', availability });
+        return;
+      }
+      if (suffix === '/complete' && method === 'POST') {
+        const body = JSON.parse((await readBody(req)) || '{}');
+        if (!availability.qq.running) {
+          json(res, 409, { ok: false, error: 'QQ 桥接没在运行，无法写入目的状态', availability });
+          return;
+        }
+        const remote = await callBridge('/api/purpose/complete', { method: 'POST', body, timeoutMs: 10000 });
         json(res, remote?.status || 200, { ...(remote?.data ?? {}), source: 'qq', carrier: 'qq', availability });
         return;
       }

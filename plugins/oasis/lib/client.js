@@ -1,4 +1,4 @@
-/**
+﻿/**
           rfcore —— 客户端半边：DSH 设置里的「Oasis」窗口。
  *
  * 这是合体后唯一的设置入口。它按标签页装下：
@@ -1123,7 +1123,7 @@ F("sessionCwd", "会话工作目录", "留空用 oasis 根目录", "text", { bro
         F("fishGuard.failCooldownMinutes", "风控失败冷却（分钟）", "默认 60；遇到 -509/12015 等码自动停手", "number", { min: 1 }),
       ]},
       { group: "B站 会话权限", note: "只影响她自己的 DSH 会话（bili-whale-*），不影响 QQ 桥接；改完下一次 tick 生效", fields: [
-        F("agent.sandbox", "会话权限", "danger-full-access = 定时醒来能跑 bili.mjs（推荐；C:\\Users\\<user> 用 workspace-write 会因 WRITE_OWNER 起不了命令）；workspace-write = 更安全但可能什么都跑不了", "select", {
+        F("agent.sandbox", "会话权限", "danger-full-access = 定时醒来能跑 bili.mjs（推荐；C:\\Users\\Mieksido 用 workspace-write 会因 WRITE_OWNER 起不了命令）；workspace-write = 更安全但可能什么都跑不了", "select", {
           options: [["danger-full-access", "完全访问（推荐，能跑工具）"], ["workspace-write", "仅工作区（更安全，可能跑不了命令）"]],
         }),
       ]},
@@ -1345,7 +1345,7 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
       const shadow = Boolean(overview?.shadow);
       return h("div", null,
         shadow ? h("div", { className: "qbw-warnbox", style: { marginBottom: "10px" } },
-          "这是只读观察模式。") : null,
+          "这是 Oasis 平行只读副本（SHADOW）。上面的 QQ 桥接状态来自旧主插件；本副本不会启动、停止或重启它。所有写操作已禁用。") : null,
         h("div", { className: "qbw-infobox" },
           "Oasis " + (oasis.version ?? "") + "：一个身份，多个身体。",
           "QQ / B站 / 桌宠共用同一套人格、记忆与情绪；双向脱敏记忆、身份对齐、情绪/需求驱动与公共动作审批，都在本机完成。",
@@ -1550,6 +1550,19 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
         } finally { setBusy(""); }
       };
 
+      const doComplete = async (body) => {
+        setBusy("purpose-complete");
+        setMsg("");
+        try {
+          const r = await api("/purpose/complete", { method: "POST", body });
+          if (!r.ok) throw new Error(r.error ?? "结案失败");
+          toast("✓ 已标记完成");
+          await load();
+        } catch (e) {
+          setMsg(`✗ ${e.message}`);
+        } finally { setBusy(""); }
+      };
+
       const applyPreset = (name) => {
         const presets = {
           calm: { label: "保守", gapMinMs: 240 * 60000, gapMaxMs: 480 * 60000, dailyMax: 2, quietStart: "23:00", quietEnd: "09:00", initialDelayMinMs: 60 * 60000 },
@@ -1648,9 +1661,16 @@ F("toolsPath", "bili.mjs 路径", "留空 = 用合体插件自带的 tools/", "t
             h("div", { style: { fontSize: "12px", opacity: 0.7, marginBottom: "2px" } }, "当前驱力（凭什么这次更想聊这个）"),
             driveRows) : null,
           goals.length ? h("div", { style: { marginTop: "10px" } },
-            h("div", { style: { fontSize: "12px", opacity: 0.7, marginBottom: "2px" } }, "当前目标假设（前 3 个）"),
-            goals.slice(0, 3).map((g) => h("div", { key: g.id, className: "qbw-hint", style: { marginTop: "3px" } },
-              `[${g.ownerLabel}/${g.domain}] ${g.intent}（置信 ${Math.round((g.confidence || 0) * 100)}% · 风险 ${Math.round((g.risk || 0) * 100)}%）`))) : null,
+            h("div", { style: { fontSize: "12px", opacity: 0.7, marginBottom: "2px" } }, "当前目标假设（前 5 个，可手动结案）"),
+            goals.slice(0, 5).map((g) => h("div", { key: g.id, className: "qbw-hint", style: { marginTop: "3px", display: "flex", alignItems: "center", gap: "6px" } },
+              h("span", { style: { flex: 1 } },
+                `[${g.horizon === "long" ? "长期" : "短期"} · ${g.ownerLabel}/${g.domain}] ${g.intent}（置信 ${Math.round((g.confidence || 0) * 100)}% · 风险 ${Math.round((g.risk || 0) * 100)}%）`),
+              h(Btn, { kind: "qbw-btn2", onClick: () => doComplete({ goalId: g.id }) }, "完成")))) : null,
+          (st.pending || []).length ? h("div", { style: { marginTop: "10px" } },
+            h("div", { style: { fontSize: "12px", opacity: 0.7, marginBottom: "2px" } }, "心里惦记着的待续（可手动完成）"),
+            st.pending.slice(-5).map((p) => h("div", { key: p.id || p.text, className: "qbw-hint", style: { marginTop: "3px", display: "flex", alignItems: "center", gap: "6px" } },
+              h("span", { style: { flex: 1 } }, `[${p.horizon === "long" ? "长期" : "短期"}] ${p.text}`),
+              h(Btn, { kind: "qbw-btn2", onClick: () => doComplete({ pendingId: p.id, text: p.text }) }, "完成")))) : null,
           (st.lastEmotionLabel || st.lastEmotionText) ? h("div", { className: "qbw-hint", style: { marginTop: "8px" } },
             `最近情绪：${st.lastEmotionLabel || st.lastEmotionText}`) : null),
 
@@ -4685,7 +4705,7 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
             !st || !st.installed ? h("span", { style: { fontSize: "12px", opacity: 0.7 } }, form.source.trim() ? "" : "← 先在下方「安装设置」填安装包地址，按钮才可点") : null,
             err ? h("div", { className: "qbw-err", style: { width: "100%", marginTop: "6px" } }, err) : null,
             err ? h("div", { style: { display: "flex", gap: "8px", marginTop: "6px", flexWrap: "wrap" } },
-              h(Btn, { kind: "qbw-btn2", onClick: () => setForm((f) => ({ ...f, source: st?.defaults?.zipUrl || "" })) }, "用官方最新版"),
+              h(Btn, { kind: "qbw-btn2", onClick: () => setForm((f) => ({ ...f, source: st?.defaults?.zipUrl || "https://github.com/Mieksido/surfpet/releases/latest/download/pet-pack.zip" })) }, "用官方最新版"),
               h(Btn, { kind: "qbw-btn2", onClick: async () => {
                 setBusy("clean"); setErr("");
                 try {
@@ -4712,9 +4732,9 @@ F("socialV2.voice.ffmpegPath", "ffmpeg 路径", "留空走 PATH", "text", { wide
             h(Browse, { mode: "dir", title: "选择桌宠安装目录", onPick: (v) => setForm((f) => ({ ...f, appDir: v })) })),
           h("div", { className: "qbw-hint", style: { marginTop: "4px" } }, "沙箱 / 只读用户目录的环境里，把安装目录指到可写位置（例如工作区内）。"),
           h("div", { className: "qbw-hint", style: { marginTop: "6px" } },
-            `官方最新包：${st?.defaults?.zipUrl || ""}`),
+            `官方最新包：${st?.defaults?.zipUrl || "https://github.com/Mieksido/surfpet/releases/latest/download/pet-pack.zip"}`),
           h("div", { className: "qbw-actions" },
-            h(Btn, { kind: "qbw-btn2", onClick: () => setForm((f) => ({ ...f, source: st?.defaults?.zipUrl || "" })) }, "用官方最新版"),
+            h(Btn, { kind: "qbw-btn2", onClick: () => setForm((f) => ({ ...f, source: st?.defaults?.zipUrl || "https://github.com/Mieksido/surfpet/releases/latest/download/pet-pack.zip" })) }, "用官方最新版"),
             h(Btn, { kind: "qbw-btn2", disabled: busy === "electron-detect", onClick: () => act("electron-detect") }, busy === "electron-detect" ? "检测中…" : "检测 Electron"),
             h(Btn, { kind: "qbw-btn2", disabled: busy === "electron-install", onClick: () => act("electron-install", { source: "auto" }) },
               busy === "electron-install" ? "下载中…（约 125MB，2~5 分钟）" : `下载 Electron ${st?.defaults?.electronVersion || "45.0.0"}`),

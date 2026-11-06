@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Oasis · 目的机制（主动搭话）的桌宠载体
  *
  * 和 QQ 里的目的机制是**同一套逻辑**（同一个 src/purpose-engine.js、同一份状态文件、
@@ -35,6 +35,9 @@ import {
   normalizePurposeConfig,
   normalizePurposeState,
   planNextFire,
+  prunePurposeState,
+  reconcilePurposeCompletion,
+  migratePurposeState,
   selectPurpose,
   summarizePurposeState,
 } from '../../../src/purpose-engine.js';
@@ -119,6 +122,7 @@ export function createPetPurposeService({ chat, tokenBudget = null, pluginLog = 
     stateFile = nextFile;
     const raw = readJson(stateFile, null);
     const state = normalizePurposeState(raw, Date.now());
+    try { migratePurposeState(state, { now: Date.now(), config: purposeConfig().config }); } catch (error) { pluginLog('[pet-purpose]', '状态迁移失败：' + String(error?.message ?? error).slice(0, 120)); }
     if (state.lastOutcome === 'pending') {
       // 上次进程在生成/投递中途退出：不知道发没发出去，按 interrupted 处理，等下一枪。
       state.lastOutcome = 'interrupted';
@@ -489,6 +493,9 @@ export function createPetPurposeService({ chat, tokenBudget = null, pluginLog = 
       state.drivesAt = prepared.derived.drivesAt;
       state.goals = prepared.formed.goals;
       state.observations = prepared.formed.observations;
+      reconcilePurposeCompletion(state, { now });
+      prunePurposeState(state, { now, config: prepared.config });
+      prepared.pending = state.pending;
       state.lastMaterialCount = prepared.materials.length;
       state.lastCandidateCount = 0;
 

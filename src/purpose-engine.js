@@ -1,4 +1,4 @@
-import { needsToMotivation, blendMotivation } from './brain/motivation.js';
+﻿import { needsToMotivation, blendMotivation } from './brain/motivation.js';
 
 /**
  * 目的机制（purpose outreach）—— 纯逻辑层。
@@ -44,6 +44,7 @@ export const DEFAULT_PURPOSE_CONFIG = Object.freeze({
   maxAttempts: 3,
   historyLimit: 60,
   pendingTtlDays: 14,
+  shortPendingTtlHours: 48,
   maxCandidates: 6,
   promptMaxChars: 16000,
 });
@@ -51,6 +52,30 @@ export const DEFAULT_PURPOSE_CONFIG = Object.freeze({
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
+const HORIZONS = Object.freeze(['short', 'long']);
+
+/** 时间型待续：从文字里识别「今晚/明天/后天」，用来在事件结束后自动关闭。 */
+function inferDueAt(text, now = Date.now()) {
+  const raw = String(text ?? '');
+  const d = new Date(now);
+  d.setHours(23, 59, 0, 0);
+  if (/今晚|今天/.test(raw)) return d.getTime();
+  if (/明天|明晚/.test(raw)) { d.setDate(d.getDate() + 1); return d.getTime(); }
+  if (/后天/.test(raw)) { d.setDate(d.getDate() + 2); return d.getTime(); }
+  return 0;
+}
+function inferHorizon(text, fallback = 'short') {
+  const raw = String(text ?? '');
+  if (/长期|以后|有空|过几天|接下来|项目|人格卡|开机动画/.test(raw)) return 'long';
+  if (/今晚|今天|明天|后天|等会|一会儿|马上/.test(raw)) return 'short';
+  return HORIZONS.includes(fallback) ? fallback : 'short';
+}
+function inferGoalHorizon(raw, ttlDays) {
+  if (raw && HORIZONS.includes(raw.horizon)) return raw.horizon;
+  if (raw && raw.source === 'persona') return 'long';
+  if (ttlDays >= 20) return 'long';
+  return inferHorizon(raw?.text || raw?.intent || '', 'short');
+}
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -156,6 +181,7 @@ export function normalizePurposeConfig(input = {}, { ownerQQ = '' } = {}) {
     maxAttempts: clampInt(src.maxAttempts, DEFAULT_PURPOSE_CONFIG.maxAttempts, 1, 10),
     historyLimit: clampInt(src.historyLimit, DEFAULT_PURPOSE_CONFIG.historyLimit, 10, 200),
     pendingTtlDays: clampInt(src.pendingTtlDays, DEFAULT_PURPOSE_CONFIG.pendingTtlDays, 1, 90),
+    shortPendingTtlHours: clampInt(src.shortPendingTtlHours, DEFAULT_PURPOSE_CONFIG.shortPendingTtlHours, 1, 168),
     maxCandidates: clampInt(src.maxCandidates, DEFAULT_PURPOSE_CONFIG.maxCandidates, 3, 10),
     promptMaxChars: clampInt(src.promptMaxChars, DEFAULT_PURPOSE_CONFIG.promptMaxChars, 4000, 30000),
   };
@@ -172,6 +198,9 @@ export function createPurposeState(now = Date.now()) {
     lastOutcome: '',
     lastPurpose: '',
     lastText: '',
+    lastCompletedAt: 0,
+    completedCount: 0,
+    lastMigrationAt: 0,
     nextFireAt: 0,
     attempts: 0,
     // 驱动向量：为什么今天特别想玩 / 特别想找人说话。跨天保留，随时间衰减。
@@ -210,6 +239,9 @@ function normalizeHistoryEntry(raw) {
     goalId: String(raw.goalId ?? '').slice(0, 24),
     goalOwner: GOAL_OWNERS.includes(raw.goalOwner) ? raw.goalOwner : '',
     confidence: Number.isFinite(Number(raw.confidence)) ? clamp01(raw.confidence, 0) : null,
+    horizon: HORIZONS.includes(raw.horizon) ? raw.horizon : '',
+    completedAt: Number(raw.completedAt) || 0,
+    completionSource: String(raw.completionSource ?? '').slice(0, 24),
   };
 }
 
@@ -228,6 +260,12 @@ function normalizePendingEntry(raw) {
     createdAt: Number(raw.createdAt) || Date.now(),
     expiresAt: Number(raw.expiresAt) || 0,
     hits: clampInt(raw.hits, 0, 0, 99),
+    horizon: HORIZONS.includes(raw.horizon) ? raw.horizon : inferHorizon(raw.text, 'short'),
+    dueAt: Number(raw.dueAt) || inferDueAt(raw.text, Number(raw.createdAt) || Date.now()),
+    eventDate: Number(raw.eventDate) || 0,
+    relatedGoalId: String(raw.relatedGoalId ?? '').slice(0, 24),
+    completedAt: Number(raw.completedAt) || 0,
+    completionSource: String(raw.completionSource ?? '').slice(0, 24),
   };
 }
 
@@ -242,6 +280,9 @@ export function normalizePurposeState(raw, now = Date.now()) {
   base.lastOutcome = String(raw.lastOutcome ?? '').slice(0, 24);
   base.lastPurpose = clip(raw.lastPurpose, 120);
   base.lastText = clip(raw.lastText, 200);
+  base.lastCompletedAt = Number(raw.lastCompletedAt) || 0;
+  base.completedCount = clampInt(raw.completedCount, 0, 0, 9999);
+  base.lastMigrationAt = Number(raw.lastMigrationAt) || 0;
   base.nextFireAt = Number(raw.nextFireAt) || 0;
   base.attempts = clampInt(raw.attempts, 0, 0, 20);
   base.drives = normalizeDrives(raw.drives);
@@ -414,10 +455,18 @@ export function applyPurposeOutcome(state, {
         need: need || planned?.need || '',
         action: action || planned?.action || '',
         emotion: emotion || planned?.emotion || '',
+        horizon: planned?.horizon || '',
+        relatedGoalId: planned?.goalId || '',
         now,
         config,
       });
     } else if (memo?.status === '完成') {
+      completeGoal(state.goals, {
+        goalId: planned?.goalId || '',
+        text: memo.purpose || planned?.text || '',
+        now,
+        source: 'purpose-memo',
+      });
       resolvePendingPurpose(state, memo.purpose || '');
     } else if (planned?.fromPending && planned?.text) {
       // 没写备忘，但这次本来就是接着「惦记的事」说的：默认这件事已经推进过一轮。
@@ -432,6 +481,8 @@ export function applyPurposeOutcome(state, {
         need: need || planned?.need || '',
         action: action || planned?.action || '',
         emotion: emotion || planned?.emotion || '',
+        horizon: planned?.horizon || '',
+        relatedGoalId: planned?.goalId || '',
         now,
         config,
       });
@@ -463,12 +514,74 @@ export function applyPurposeOutcome(state, {
   return state;
 }
 
+/**
+ * 一次性迁移：把新生命周期上线前留下的「短期旧目标/旧待续」清掉。
+ * 只清 purpose 状态，不删记忆、人格或历史。
+ */
+export function migratePurposeState(state, { now = Date.now(), config = DEFAULT_PURPOSE_CONFIG } = {}) {
+  const cutoffShort = now - Math.max(36, Number(config.shortPendingTtlHours) || 48) * HOUR;
+  let expired = 0;
+  for (const g of Array.isArray(state.goals) ? state.goals : []) {
+    if (!g || g.status === 'done' || g.status === 'expired') continue;
+    // owner-topic 是旧版「每句话都生成目的」的噪声，迁移时统一关闭。
+    if (g.source === 'owner-topic') {
+      g.status = 'expired';
+      g.completedAt = now;
+      g.completionSource = 'migration-owner-topic';
+      expired += 1;
+      continue;
+    }
+    if (g.horizon === 'short' && Number(g.createdAt) > 0 && Number(g.createdAt) < cutoffShort) {
+      g.status = 'expired';
+      g.completedAt = now;
+      g.completionSource = 'migration-short';
+      expired += 1;
+    }
+  }
+  const beforePending = Array.isArray(state.pending) ? state.pending.length : 0;
+  // 旧格式没有 horizon；凡是 48 小时以上未推进的 pending 都视为陈旧待续。
+  state.pending = (Array.isArray(state.pending) ? state.pending : []).filter((p) => {
+    if (!p) return false;
+    return now - (Number(p.createdAt) || now) <= 48 * HOUR;
+  });
+  prunePurposeState(state, { now, config });
+  state.goals = pruneGoals(state.goals, now);
+  const removedPending = Math.max(0, beforePending - (Array.isArray(state.pending) ? state.pending.length : 0));
+  state.completedCount = (Number(state.completedCount) || 0) + expired + removedPending;
+  state.lastCompletedAt = now;
+  if (!Number(state.lastMigrationAt)) state.lastPurpose = '';
+  state.lastText = '';
+  state.lastOutcome = state.lastOutcome === 'pending' ? 'migrated' : state.lastOutcome;
+  state.nextFireAt = Math.max(Number(state.nextFireAt) || 0, now + 30 * MINUTE);
+  state.lastMigrationAt = now;
+  return state;
+}
+
 export function prunePurposeState(state, { now = Date.now(), config = DEFAULT_PURPOSE_CONFIG } = {}) {
-  const ttlMs = Math.max(1, Number(config.pendingTtlDays) || DEFAULT_PURPOSE_CONFIG.pendingTtlDays) * DAY;
-  state.pending = (Array.isArray(state.pending) ? state.pending : [])
-    .filter((p) => p && p.text && (!p.expiresAt || Number(p.expiresAt) > now))
-    .map((p) => ({ ...p, expiresAt: Number(p.expiresAt) || now + ttlMs }))
-    .slice(-20);
+  const longTtlMs = Math.max(1, Number(config.pendingTtlDays) || DEFAULT_PURPOSE_CONFIG.pendingTtlDays) * DAY;
+  const shortTtlMs = Math.max(1, Number(config.shortPendingTtlHours) || DEFAULT_PURPOSE_CONFIG.shortPendingTtlHours) * HOUR;
+  const kept = [];
+  for (const p of Array.isArray(state.pending) ? state.pending : []) {
+    if (!p || !p.text || p.completedAt) {
+      if (p && p.completedAt) {
+        state.lastCompletedAt = Math.max(Number(state.lastCompletedAt) || 0, Number(p.completedAt) || now);
+      }
+      continue;
+    }
+    const due = Number(p.dueAt) || Number(p.eventDate) || 0;
+    if (due > 0 && due <= now) {
+      state.lastCompletedAt = now;
+      state.completedCount = (Number(state.completedCount) || 0) + 1;
+      continue;
+    }
+    const ttlMs = p.horizon === 'short' ? shortTtlMs : longTtlMs;
+    p.expiresAt = Number(p.expiresAt) || now + ttlMs;
+    if (Number(p.expiresAt) <= now) continue;
+    // 短期待续不能因为 14 天总 TTL 而无限存活。
+    if (p.horizon === 'short' && now - (Number(p.createdAt) || now) > shortTtlMs) continue;
+    kept.push(p);
+  }
+  state.pending = kept.slice(-20);
   const limit = Math.max(10, Number(config.historyLimit) || DEFAULT_PURPOSE_CONFIG.historyLimit);
   state.history = (Array.isArray(state.history) ? state.history : []).slice(-limit);
   return state;
@@ -825,6 +938,9 @@ const PERSONA_WORDS = Object.freeze({
 });
 
 const POSITIVE_RE = /开心|喜欢|爱|可爱|好笑|笑死|厉害|治愈|温暖|惊喜|幸福|好玩|想玩|想吃|绝了|赞/;
+// 这些是「关于记忆/系统本身」的纠正对话，不是她要做的新目的；
+// 不能让主人说「你记忆混乱了」反过来生成新的目的候选。
+const OWNER_META_RE = /记忆混乱|记忆错乱|你查查你的记忆|查查记忆|是不是记错|你记岔|记忆有问题|系统提示|机制|状态文件/;
 const NEGATIVE_RE = /难过|累|焦虑|害怕|孤独|寂寞|羡慕|嫉妒|生气|烦|压力|遗憾|哭|担心|崩溃/;
 const AROUSAL_RE = /笑死|炸|疯|激动|震撼|刺激|太|超|绝了|!!!|！！/;
 const RELATION_RE = /爱|关系|人机|机器人|ai|寂寞|孤独|陪|想你|主人/;
@@ -1161,6 +1277,9 @@ function normalizeGoal(raw, now = Date.now()) {
   if (!domain || !intent) return null;
   const owner = GOAL_OWNERS.includes(raw.owner) ? raw.owner : 'self';
   const object = isPlainObject(raw.object) ? raw.object : { type: 'topic', name: clip(raw.object ?? '', 32) };
+  const horizon = HORIZONS.includes(raw.horizon)
+    ? raw.horizon
+    : (raw.source === 'persona' ? 'long' : inferHorizon(raw.intent || raw.text || '', 'short'));
   return {
     id: String(raw.id ?? '').slice(0, 24) || `g-${hashId(`${owner}|${domain}|${object.name}|${intent}`)}`,
     owner,
@@ -1189,6 +1308,12 @@ function normalizeGoal(raw, now = Date.now()) {
     lastFeedbackAt: Number(raw.lastFeedbackAt) || 0,
     sightings: clampInt(raw.sightings, 1, 1, 99),
     source: String(raw.source ?? 'event').slice(0, 12),
+    horizon,
+    dueAt: Number(raw.dueAt) || 0,
+    eventDate: Number(raw.eventDate) || 0,
+    completedAt: Number(raw.completedAt) || 0,
+    completionSource: String(raw.completionSource ?? '').slice(0, 24),
+    parentGoalId: String(raw.parentGoalId ?? '').slice(0, 24),
   };
 }
 
@@ -1222,8 +1347,14 @@ function makeGoal({
   owner, domain, object, intent, action, evidence = [], confidence = 0.3,
   value = 0.4, urgency = 0.2, risk = 0.1, emotion = '', now = Date.now(),
   ttlDays = 7, source = 'event', status = 'hypothesis',
+  horizon = '', dueAt = 0, eventDate = 0, parentGoalId = '',
 } = {}) {
   const cleanAction = String(action || 'share').slice(0, 16);
+  const goalHorizon = HORIZONS.includes(horizon) ? horizon : inferHorizon(intent, 'short');
+  const effectiveTtl = goalHorizon === 'short'
+    ? Math.min(Math.max(1, Number(ttlDays) || 2), 3)
+    : Math.max(7, Number(ttlDays) || 14);
+  const cleanDueAt = Number(dueAt) || inferDueAt(intent, now);
   return {
     id: `g-${hashId(`${owner}|${domain}|${object?.name ?? ''}|${intent}`)}`,
     owner, domain,
@@ -1240,7 +1371,13 @@ function makeGoal({
     emotion: String(emotion || '').slice(0, 20),
     createdAt: now,
     lastSeenAt: now,
-    expiresAt: now + Math.max(1, Number(ttlDays) || 7) * DAY,
+    expiresAt: Math.min(now + effectiveTtl * DAY, cleanDueAt ? cleanDueAt + 2 * HOUR : Infinity),
+    horizon: goalHorizon,
+    dueAt: cleanDueAt,
+    eventDate: Number(eventDate) || 0,
+    completedAt: 0,
+    completionSource: '',
+    parentGoalId: String(parentGoalId || '').slice(0, 24),
     attempts: 0,
     lastActionAt: 0,
     lastFeedbackAt: 0,
@@ -1284,18 +1421,13 @@ function hypothesesForEvent(event, { drives, now, lastMasterAt, hoursSinceMaster
       || PLAN_RE.test(ownerText) || NEGATIVE_RE.test(ownerText) || POSITIVE_RE.test(ownerText);
     const meaningful = (ownerText.length >= 6 || looksPlan)
       && !/^(早|早安|晚安|在吗|在嘛|嗨|哈喽|你好|好|嗯|哦|哈哈)[~～!！。. ]*$/.test(ownerText);
+    if (OWNER_META_RE.test(ownerText)) return out;
     // 群聊里主人说的话不是「主动私聊找主人」的素材：那是群聊回合该处理的事。
     if (!isPrivate) return out;
     if (!meaningful) return out;
     if (!isLife) {
-      // 私聊里主人在聊技术/作品/见闻：不要写成高置信度的「关心」，只记成「想接着聊」。
-      out.push(makeGoal({
-        owner: 'owner', domain: event.domain, object: event.object,
-        intent: `主人刚提到「${clip(objectName, 24)}」，想接着聊聊`,
-        action: 'share', evidence, confidence: 0.5,
-        value: Math.max(0.45, value * 0.8), urgency: 0.3, risk: 0.05, emotion,
-        now, ttlDays: 7, source: 'owner-topic',
-      }));
+      // 目的系统只处理明确的计划/承诺/关心，不把每句技术闲聊变成「想接着聊」；
+      // 旧实现会在这里生成 owner-topic 目标，最终污染候选池。
       return out;
     }
     const care = event.domain === 'care' || PLAN_RE.test(event.text);
@@ -1424,8 +1556,13 @@ function mergeGoal(goals, incoming, { fresh = true } = {}) {
   const key = `${incoming.owner}|${incoming.domain}|${incoming.object.name.toLowerCase()}`;
   const existing = goals.find((g) => `${g.owner}|${g.domain}|${g.object.name.toLowerCase()}` === key);
   if (!existing) return [...goals, incoming];
+  // 已完成/已过期的目的不能被后续旧素材自动复活；只允许新目标以新 id 重新进入。
+  if (existing.status === 'done' || existing.status === 'expired') return goals;
   existing.lastSeenAt = Math.max(existing.lastSeenAt || 0, incoming.lastSeenAt || 0);
   existing.expiresAt = Math.max(existing.expiresAt || 0, incoming.expiresAt || 0);
+  if (incoming.horizon === 'long') existing.horizon = 'long';
+  if (incoming.dueAt) existing.dueAt = existing.dueAt || incoming.dueAt;
+  if (incoming.eventDate) existing.eventDate = existing.eventDate || incoming.eventDate;
   // 同一批旧素材每次 tick 都还在窗口里：只看一眼，不再抬置信度/ sightings。
   // 否则「看过一次插件视频」会在每轮被动 +0.02，最后变成永久欲望。
   if (!fresh) return goals;
@@ -1450,6 +1587,7 @@ function mergeGoal(goals, incoming, { fresh = true } = {}) {
 
 const POSITIVE_REPLY_RE = /好|可以|一起|哈哈|笑死|行|来|试试|喜欢|想|当然|没问题|可爱|不错/;
 const NEGATIVE_REPLY_RE = /不要|不想|不用|没空|没兴趣|算了|下次吧|别|忙/;
+const COMPLETION_REPLY_RE = /已经|去过|去完了|做完了|完成了|结束了|搞定了|弄完了|发过了|发了|给过了|看过了|结束了/;
 function classifyOwnerReply(text) {
   const raw = String(text ?? '');
   if (!raw) return 'none';
@@ -1471,6 +1609,16 @@ export function applyGoalFeedback(goals, materials, now = Date.now()) {
     const reply = ownerTexts.filter((m) => Number(m.at) > since && Number(m.at) - since <= 24 * HOUR)
       .map((m) => String(m.text ?? '')).join(' ');
     const cls = classifyOwnerReply(reply);
+    const goalTopic = String(goal.object?.name || '').slice(0, 8);
+    const completionHit = COMPLETION_REPLY_RE.test(reply)
+      && (!goalTopic || reply.includes(goalTopic) || textSimilarity(reply, goal.intent) >= 0.2);
+    if (completionHit) {
+      goal.status = 'done';
+      goal.completedAt = now;
+      goal.completionSource = 'owner-completion';
+      goal.lastFeedbackAt = now;
+      continue;
+    }
     if (cls === 'positive') {
       goal.status = 'confirmed';
       goal.confidence = Math.min(0.95, Number(goal.confidence) + 0.15);
@@ -1495,10 +1643,23 @@ export function applyGoalFeedback(goals, materials, now = Date.now()) {
 }
 
 export function pruneGoals(goals, now = Date.now()) {
-  const sorted = (Array.isArray(goals) ? goals : [])
-    .filter((g) => g && g.intent && g.status !== 'expired')
-    .filter((g) => !g.expiresAt || g.expiresAt > now || (g.attempts > 0 && now - (g.lastActionAt || 0) < 14 * DAY))
-    .sort((a, b) => (b.confidence * b.value) - (a.confidence * a.value));
+  const normalized = (Array.isArray(goals) ? goals : [])
+    .filter((g) => g && g.intent)
+    .map((g) => {
+      if (g.status === 'done' || g.status === 'expired') return g;
+      const eventAt = Number(g.dueAt) || Number(g.eventDate) || 0;
+      if (eventAt > 0 && eventAt <= now) {
+        return { ...g, status: 'done', completedAt: g.completedAt || now, completionSource: 'event-date' };
+      }
+      if (g.expiresAt && g.expiresAt <= now) {
+        return { ...g, status: 'expired', completedAt: g.completedAt || now, completionSource: 'ttl' };
+      }
+      return g;
+    });
+  // 过期目标不再占用候选；done 保留一轮用于 UI/审计，但不会进入选择器。
+  const active = normalized.filter((g) => g.status !== 'expired');
+  const sorted = active
+    .sort((a, b) => (b.status === 'done' ? 0 : b.confidence * b.value) - (a.status === 'done' ? 0 : a.confidence * a.value));
   // 每个需要最多留 5 个：记忆卡里 8 条「和主人有关」的记忆不该把候选全挤成 connect。
   const byDomain = new Map();
   const kept = [];
@@ -1546,7 +1707,7 @@ function personaGoalSpec(need, persona, { now = Date.now(), lastMasterAt = 0, ho
     value: 0.42 + Math.min(0.2, bias),
     urgency: 0.22 + Math.min(0.1, bias * 0.3),
     risk: spec.risk, emotion: spec.emotion,
-    now, ttlDays: 30, source: 'persona',
+    now, ttlDays: 30, horizon: 'long', source: 'persona',
   });
 }
 
@@ -1604,7 +1765,7 @@ export function formGoalHypotheses({
       action: 'share',
       evidence: [{ id: 'persona', text: clip(persona.text, 120), source: 'persona', at: now }],
       confidence: 0.3, value: 0.42, urgency: 0.22, risk: 0.05, emotion: 'content',
-      now, ttlDays: 30, source: 'persona',
+      now, ttlDays: 30, horizon: 'long', source: 'persona',
     });
     list = mergeGoal(list, goal, { fresh: false });
   }
@@ -1635,6 +1796,9 @@ export function goalToCandidate(goal) {
     nextStep: goal.nextStep,
     weight: 1,
     fromPending: false,
+    horizon: goal.horizon || 'short',
+    dueAt: Number(goal.dueAt) || Number(goal.eventDate) || 0,
+    createdAt: Number(goal.createdAt) || 0,
   };
 }
 
@@ -1840,7 +2004,7 @@ export function selectPurpose({
   const query = normalizeDrives(drives);
   const hoursSinceMaster = lastMasterAt > 0 ? Math.max(0, (now - lastMasterAt) / HOUR) : 24;
   const candidates = [];
-  const add = (item, weight, fromPending) => {
+  const add = (item, weight, fromPending, extra = {}) => {
     const text = clip(item?.text, 120);
     if (!text) return;
     if (isDuplicateText(text, recent)) return;
@@ -1884,20 +2048,43 @@ export function selectPurpose({
       risk: Number.isFinite(Number(item.risk)) ? clamp01(item.risk, 0) : null,
       value: Number.isFinite(Number(item.value)) ? clamp01(item.value, 0) : null,
       nextStep: String(item.nextStep || '').slice(0, 80),
+      horizon: HORIZONS.includes(item.horizon) ? item.horizon : inferHorizon(text, 'short'),
+      dueAt: Number(item.dueAt) || 0,
+      createdAt: Number(item.createdAt || item.at || 0) || 0,
+      pendingAgeHours: extra.pendingAgeHours == null ? null : Number(extra.pendingAgeHours),
     });
   };
 
   for (const goal of Array.isArray(goals) ? goals : []) {
-    // 被拒绝/已完成/过期的目标不再主动提；新证据会把 rejected 重新变回 hypothesis。
+    // 被拒绝/已完成/过期/已到事件日期的目标不再主动提。
     if (!goal || ['rejected', 'done', 'expired'].includes(goal.status)) continue;
+    if ((Number(goal.dueAt) || Number(goal.eventDate) || 0) > 0 && (Number(goal.dueAt) || Number(goal.eventDate)) <= now) continue;
+    // owner-topic 只是聊天连续性，不是长期目的；超过 12 小时就不再占候选。
+    if (goal.source === 'owner-topic' && now - (Number(goal.createdAt) || now) > 12 * HOUR) continue;
     const candidate = goalToCandidate(goal);
     if (candidate) add(candidate, 1, false);
   }
   for (const seed of Array.isArray(seeds) ? seeds : []) add(seed, seed?.weight ?? 1, false);
-  for (const p of Array.isArray(pending) ? pending : []) add(p, (Number(p?.weight) || 1) + 0.35, true);
+  for (const p of Array.isArray(pending) ? pending : []) {
+    if (!p || p.completedAt) continue;
+    const due = Number(p.dueAt) || Number(p.eventDate) || 0;
+    if (due > 0 && due <= now) continue;
+    const ageH = Math.max(0, (now - (Number(p.createdAt) || now)) / HOUR);
+    const ageDecay = Math.exp(-ageH / (p.horizon === 'long' ? 24 * 14 : 18));
+    // 旧的短期 pending 不再获得“优先惦记”特权。
+    const pendingPriority = p.horizon !== 'short' || ageH <= 24;
+    add(p, (Number(p?.weight) || 1) + 0.35 * ageDecay, pendingPriority, { pendingAgeHours: ageH });
+  }
 
   // 驱动越高的需要，越容易在这一次被选中；寂寞/羡慕这种情绪会再推一把。
   for (const c of candidates) {
+    const ageH = c.createdAt ? Math.max(0, (now - c.createdAt) / HOUR) : 0;
+    if (ageH > 0) {
+      const ageDecay = c.horizon === 'long'
+        ? Math.exp(-ageH / (24 * 45))
+        : Math.exp(-ageH / 24);
+      c.weight *= Math.max(0.15, ageDecay);
+    }
     if (c.goalId) {
       // 目标假设：置信度/价值/风险都参与排序；风险高的不因为「想说」就排前面。
       c.weight *= 0.55 + (c.confidence ?? 0.3) * 0.7 + (c.value ?? 0.4) * 0.35 - (c.risk ?? 0.1) * 0.25;
@@ -2211,6 +2398,9 @@ export function addPendingPurpose(state, {
   need = '',
   action = '',
   emotion = '',
+  horizon = '',
+  dueAt = 0,
+  relatedGoalId = '',
   now = Date.now(),
   config = DEFAULT_PURPOSE_CONFIG,
 } = {}) {
@@ -2224,9 +2414,16 @@ export function addPendingPurpose(state, {
     if (need) existing.need = need;
     if (action) existing.action = action;
     if (emotion) existing.emotion = emotion;
+    if (horizon) existing.horizon = horizon;
+    if (dueAt) existing.dueAt = dueAt;
+    if (relatedGoalId) existing.relatedGoalId = relatedGoalId;
     return existing;
   }
-  const ttl = Math.max(1, Number(config.pendingTtlDays) || DEFAULT_PURPOSE_CONFIG.pendingTtlDays) * DAY;
+  const pendingHorizon = HORIZONS.includes(horizon) ? horizon : inferHorizon(clean, 'short');
+  const ttl = pendingHorizon === 'short'
+    ? Math.max(1, Number(config.shortPendingTtlHours) || DEFAULT_PURPOSE_CONFIG.shortPendingTtlHours) * HOUR
+    : Math.max(1, Number(config.pendingTtlDays) || DEFAULT_PURPOSE_CONFIG.pendingTtlDays) * DAY;
+  const pendingDueAt = Number(dueAt) || inferDueAt(clean, now);
   const entry = {
     id: `p-${hashId(clean)}`,
     text: clean,
@@ -2236,7 +2433,13 @@ export function addPendingPurpose(state, {
     emotion: String(emotion || '').slice(0, 20),
     source: 'memo',
     createdAt: now,
-    expiresAt: now + ttl,
+    expiresAt: Math.min(now + ttl, pendingDueAt ? pendingDueAt + 2 * HOUR : Infinity),
+    horizon: pendingHorizon,
+    dueAt: pendingDueAt,
+    eventDate: 0,
+    relatedGoalId: String(relatedGoalId || '').slice(0, 24),
+    completedAt: 0,
+    completionSource: '',
     hits: 0,
   };
   state.pending = [...(Array.isArray(state.pending) ? state.pending : []), entry].slice(-12);
@@ -2254,10 +2457,79 @@ export function resolvePendingPurpose(state, text = '') {
     if (score > bestScore) { best = p; bestScore = score; }
   }
   if (best && bestScore >= 0.5) {
+    best.completedAt = Date.now();
+    best.completionSource = 'purpose-memo';
     state.pending = list.filter((p) => p !== best);
+    state.lastCompletedAt = Date.now();
+    state.completedCount = (Number(state.completedCount) || 0) + 1;
     return best;
   }
   return null;
+}
+
+/**
+ * 把某个目的标记完成。只改 purpose 状态，不改记忆/人格。
+ * 用于：模型明确完成、主人明确说已结束、事件日期已过、手动完成。
+ */
+export function completeGoal(goals, { goalId = '', text = '', now = Date.now(), source = 'manual' } = {}) {
+  const list = Array.isArray(goals) ? goals : [];
+  let best = null, bestScore = 0;
+  for (const goal of list) {
+    if (!goal || goal.status === 'done' || goal.status === 'expired') continue;
+    let score = 0;
+    if (goalId && goal.id === goalId) score = 1;
+    else if (text) score = Math.max(textSimilarity(goal.intent, text), textSimilarity(goal.object?.name || '', text));
+    if (score > bestScore) { best = goal; bestScore = score; }
+  }
+  if (!best || bestScore < 0.45) return null;
+  best.status = 'done';
+  best.completedAt = now;
+  best.completionSource = String(source || 'manual').slice(0, 24);
+  best.lastFeedbackAt = now;
+  best.confidence = Math.max(0.05, Math.min(0.95, Number(best.confidence) || 0.5));
+  return best;
+}
+
+export function completePendingPurpose(state, { pendingId = '', text = '', now = Date.now(), source = 'manual' } = {}) {
+  const list = Array.isArray(state.pending) ? state.pending : [];
+  let best = null, bestScore = 0;
+  for (const p of list) {
+    let score = 0;
+    if (pendingId && p.id === pendingId) score = 1;
+    else if (text) score = textSimilarity(p.text, text);
+    if (score > bestScore) { best = p; bestScore = score; }
+  }
+  if (!best || bestScore < 0.45) return null;
+  best.completedAt = now;
+  best.completionSource = String(source || 'manual').slice(0, 24);
+  state.pending = list.filter((p) => p !== best);
+  state.lastCompletedAt = now;
+  state.completedCount = (Number(state.completedCount) || 0) + 1;
+  return best;
+}
+
+/** 目标已完成/到事件日 → 关闭它的待续；短期待续到 dueAt 也关闭。 */
+export function reconcilePurposeCompletion(state, { now = Date.now() } = {}) {
+  const goals = Array.isArray(state.goals) ? state.goals : [];
+  const doneIds = new Set(goals.filter((g) => g && g.status === 'done').map((g) => g.id));
+  const keep = [];
+  for (const p of Array.isArray(state.pending) ? state.pending : []) {
+    if (!p || p.completedAt) continue;
+    if (p.relatedGoalId && doneIds.has(p.relatedGoalId)) {
+      state.lastCompletedAt = now;
+      state.completedCount = (Number(state.completedCount) || 0) + 1;
+      continue;
+    }
+    const due = Number(p.dueAt) || Number(p.eventDate) || 0;
+    if (due > 0 && due <= now) {
+      state.lastCompletedAt = now;
+      state.completedCount = (Number(state.completedCount) || 0) + 1;
+      continue;
+    }
+    keep.push(p);
+  }
+  state.pending = keep;
+  return state;
 }
 
 /** API / 设置页用的摘要（不返回提示词全文，避免把记忆内容带进页面日志）。 */
@@ -2280,6 +2552,8 @@ export function summarizePurposeState(state, { config = DEFAULT_PURPOSE_CONFIG, 
     lastEmotion: state.lastEmotion || '',
     lastEmotionLabel: EMOTION_LABELS[state.lastEmotion] || '',
     lastEmotionText: state.lastEmotionText || '',
+    lastCompletedAt: Number(state.lastCompletedAt) || 0,
+    completedCount: Number(state.completedCount) || 0,
     lastGoalId: state.lastGoalId || '',
     goals: (Array.isArray(state.goals) ? state.goals : [])
       .slice()
@@ -2289,7 +2563,9 @@ export function summarizePurposeState(state, { config = DEFAULT_PURPOSE_CONFIG, 
         id: g.id, owner: g.owner, ownerLabel: GOAL_OWNER_LABELS[g.owner] || g.owner,
         domain: g.domain, object: g.object?.name || '', intent: g.intent,
         confidence: g.confidence, value: g.value, risk: g.risk, action: g.action,
-        nextStep: g.nextStep, status: g.status, attempts: g.attempts, createdAt: g.createdAt, lastSeenAt: g.lastSeenAt,
+        nextStep: g.nextStep, status: g.status, horizon: g.horizon || '', dueAt: g.dueAt || 0,
+        completedAt: g.completedAt || 0, completionSource: g.completionSource || '',
+        attempts: g.attempts, createdAt: g.createdAt, lastSeenAt: g.lastSeenAt,
       })),
     goalCount: Array.isArray(state.goals) ? state.goals.length : 0,
     observationCount: Array.isArray(state.observations) ? state.observations.length : 0,
@@ -2301,8 +2577,9 @@ export function summarizePurposeState(state, { config = DEFAULT_PURPOSE_CONFIG, 
     drives,
     topNeeds,
     pending: (Array.isArray(state.pending) ? state.pending : []).slice(-8).map((p) => ({
-      text: p.text, kind: p.kind, need: p.need || '', action: p.action || '', emotion: p.emotion || '',
-      hits: Number(p.hits) || 0, createdAt: p.createdAt, expiresAt: p.expiresAt,
+      id: p.id, text: p.text, kind: p.kind, need: p.need || '', action: p.action || '', emotion: p.emotion || '',
+      horizon: p.horizon || '', dueAt: p.dueAt || 0, eventDate: p.eventDate || 0,
+      relatedGoalId: p.relatedGoalId || '', hits: Number(p.hits) || 0, createdAt: p.createdAt, expiresAt: p.expiresAt,
     })),
     history: (Array.isArray(state.history) ? state.history : []).slice(-10).map((h) => ({
       at: h.at, outcome: h.outcome, kind: h.kind, need: h.need || '', action: h.action || '',
